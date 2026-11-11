@@ -12,6 +12,20 @@ namespace YandexMiniPlayer;
 public sealed partial class Player
 {
  Canvas? deviceFace;
+ Button? facePin;
+ void TogglePin(){Topmost=!Topmost;UpdatePin();Save();}
+ void UpdateFacePin(){
+  if(facePin==null)return;
+  bool lcd=appearance.Theme=="Карманный LCD",sun=appearance.Theme=="Закат";
+  var ink=BrushOf(Topmost?(lcd?"#DCF3B1":sun?"#923917":"#542437"):(lcd?"#C8CFC7":"#50464B"));
+  facePin.Background=BrushOf(Topmost?(lcd?"#344635":sun?"#FFDBBF":"#F5C1CB"):(lcd?"#292F2B":sun?"#FFF5ED":"#DFD5D8"));
+  var content=new StackPanel{Orientation=Orientation.Horizontal};
+  content.Children.Add(new Path{Data=Geometry.Parse("M 4,1 L 12,1 L 11,3 L 11,7 L 14,10 L 9,10 L 8,16 L 7,10 L 2,10 L 5,7 L 5,3 Z"),Width=12,Height=14,Stretch=Stretch.Uniform,Stroke=ink,StrokeThickness=1.4,Fill=Topmost?ink:Brushes.Transparent,RenderTransformOrigin=new Point(.5,.5),RenderTransform=new RotateTransform(Topmost?0:-42)});
+  content.Children.Add(new TextBlock{Text=Topmost?"Закреплён":"Откреплён",FontFamily=new FontFamily(lcd?"Consolas":"Segoe UI"),FontSize=10,FontWeight=FontWeights.SemiBold,Foreground=ink,Margin=new Thickness(4,0,0,0),VerticalAlignment=VerticalAlignment.Center});
+  facePin.Content=content;
+  facePin.ToolTip=Topmost?"Открепить плеер":"Закрепить поверх окон";
+  System.Windows.Automation.AutomationProperties.SetName(facePin,(Topmost?"Закреплён. ":"Откреплён. ")+facePin.ToolTip);
+ }
  RotateTransform? platterRotation;
  FaceMeter? activeMeter;
  bool mediaPlaying;
@@ -34,7 +48,7 @@ public sealed partial class Player
   bool vinyl=appearance.Theme=="Винил",sun=appearance.Theme=="Закат",lcd=appearance.Theme=="Карманный LCD";
   var classic=!(vinyl||sun||lcd);
   stack.Children[0].Visibility=stack.Children[1].Visibility=classic?Visibility.Visible:Visibility.Collapsed;
-  platterRotation=null;activeMeter=null;
+  facePin=null;platterRotation=null;activeMeter=null;
   if(classic){SyncMotion();return;}
   Brush B(string c)=>BrushOf(c);
   LinearGradientBrush Gradient(string first,string last,double angle=90)=>new((Color)ColorConverter.ConvertFromString(first),(Color)ColorConverter.ConvertFromString(last),angle);
@@ -142,8 +156,9 @@ public sealed partial class Player
   meter.KeyDown+=async(_,e)=>{if(!seek.IsEnabled||e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right))return;seekTrack=track;seek.Value+=e.Key==System.Windows.Input.Key.Left?-5:5;e.Handled=true;await Seek();};
   var menu=new ContextMenu();
   void Item(string label,Action action){var item=new MenuItem{Header=label};item.Click+=(_,_)=>action();menu.Items.Add(item);}
-  Item("Развернуть / свернуть",()=>SetExpanded(!expanded));Item("Кастомизация",()=>Customize());Item("Закрепить / открепить",()=>{Topmost=!Topmost;UpdatePin();Save();});Item("Скрыть",()=>Hide());
+  Item("Развернуть / свернуть",()=>SetExpanded(!expanded));Item("Кастомизация",()=>Customize());Item("Закрепить / открепить",TogglePin);Item("Скрыть",()=>Hide());
   face.ContextMenu=menu;
+  facePin=Key(vinyl?216:sun?202:137,vinyl?86:sun?4:92,80,lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
   Key(vinyl?252:sun?286:198,vinyl?56:sun?4:10,26,22,"⋯","Меню плеера",vinyl?metal:B("#EAE3DB"),()=>menu.IsOpen=true);
 
  }

@@ -83,7 +83,7 @@ public sealed partial class Player : Window
   var header=new DockPanel{Margin=new Thickness(0,0,0,4)};
   var close=Button("×",()=>Hide());DockPanel.SetDock(close,Dock.Right);header.Children.Add(close);
   var expand=Button("⋯",()=>SetExpanded(!expanded));expand.ToolTip="Развернуть / свернуть настройки";DockPanel.SetDock(expand,Dock.Right);header.Children.Add(expand);
-  var pin=Button("",()=>{Topmost=!Topmost;UpdatePin();Save();});pinButton=pin;UpdatePin();DockPanel.SetDock(pin,Dock.Right);header.Children.Add(pin);
+  var pin=Button("",TogglePin);pinButton=pin;UpdatePin();DockPanel.SetDock(pin,Dock.Right);header.Children.Add(pin);
   var name=new TextBlock{Text="mini payer",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);stack.Children.Add(header);
   var row=new DockPanel();var art=new Border{Width=52,Height=52,Background=new SolidColorBrush(Color.FromRgb(39,57,76)),Margin=new Thickness(0,0,10,0),Child=cover};DockPanel.SetDock(art,Dock.Left);row.Children.Add(art);
   var info=new StackPanel();info.Children.Add(title);info.Children.Add(artist);var controls=new StackPanel{Orientation=System.Windows.Controls.Orientation.Horizontal,Margin=new Thickness(0,6,0,0)};
@@ -196,7 +196,7 @@ public sealed partial class Player : Window
    player.title.Text="Название трека";player.artist.Text="Исполнитель · Яндекс Музыка";player.refreshing=true;player.sources.Items.Add("Яндекс Музыка");player.sources.SelectedIndex=0;
    player.seek.Maximum=240;player.seek.Value=95;player.seek.IsEnabled=true;
    player.volumeSync=true;player.volumeSlider.Value=50;player.volumeSync=false;
-   if(args[1].Contains("minecraft"))player.appearance=new Appearance("Minecraft","#8BE878");foreach(var candidate in Themes)if(args[1].Contains(candidate))player.appearance=new Appearance(candidate,ThemeAccent(candidate),Round:candidate=="Minecraft"?0:20);player.ApplyAppearance();if(args[1].Contains("expanded"))player.SetExpanded(true);
+   if(args[1].Contains("minecraft"))player.appearance=new Appearance("Minecraft","#8BE878");foreach(var candidate in Themes)if(args[1].Contains(candidate))player.appearance=new Appearance(candidate,ThemeAccent(candidate),Round:candidate=="Minecraft"?0:20);player.Topmost=!args[1].Contains("-unpinned");player.ApplyAppearance();if(args[1].Contains("expanded"))player.SetExpanded(true);
    var root=(FrameworkElement)player.Content;root.Measure(new Size(player.Width,player.Height));root.Arrange(new Rect(0,0,player.Width,player.Height));root.UpdateLayout();
    if(args[1].Contains("custom")){player.Customize(true);root=(FrameworkElement)player.customizeWindow!.Content;player.Width=player.customizeWindow.Width;player.Height=player.customizeWindow.Height;root.Measure(new Size(player.Width,player.Height));root.Arrange(new Rect(0,0,player.Width,player.Height));root.UpdateLayout();}
    var image=new RenderTargetBitmap((int)player.Width,(int)player.Height,96,96,PixelFormats.Pbgra32);image.Render(root);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=System.IO.File.Create(args[1]))encoder.Save(file);player.tray.Dispose();return;

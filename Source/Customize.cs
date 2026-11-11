@@ -12,6 +12,7 @@ public sealed partial class Player
  record Appearance(string Theme="Светлая",string Accent="#7FA6D9",double Scale=1,double Alpha=1,string? BorderColor=null,double Round=20,double BorderWidth=1,double CoverSize=52,bool ShowArtist=true,bool ShowTime=true,string? BackgroundColor=null);
  Appearance appearance=new();Window? customizeWindow;
  void UpdatePin(){
+  UpdateFacePin();
   if(pinButton==null)return;
   var shape=new System.Windows.Shapes.Path{Data=Geometry.Parse("M 8,2 L 20,2 L 18,10 L 23,15 L 15,15 L 15,24 L 12,27 L 12,15 L 5,15 L 10,10 Z"),Fill=Topmost?Brushes.Black:Brushes.SlateGray,Width=20,Height=20,Stretch=Stretch.Uniform,RenderTransformOrigin=new Point(.5,.5),RenderTransform=new RotateTransform(Topmost?0:-45)};
   pinButton.Content=shape;pinButton.Background=Topmost?(Brush)new BrushConverter().ConvertFromString(appearance.Accent)!:Brushes.Transparent;
