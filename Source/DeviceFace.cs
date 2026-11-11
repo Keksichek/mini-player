@@ -145,7 +145,7 @@ public sealed partial class Player
   Item("Развернуть / свернуть",()=>SetExpanded(!expanded));Item("Кастомизация",()=>Customize());Item("Закрепить / открепить",()=>{Topmost=!Topmost;UpdatePin();Save();});Item("Скрыть",()=>Hide());
   face.ContextMenu=menu;
   Key(vinyl?252:sun?286:198,vinyl?56:sun?4:10,26,22,"⋯","Меню плеера",vinyl?metal:B("#EAE3DB"),()=>menu.IsOpen=true);
-  face.MouseLeftButtonDown+=(_,e)=>{if(!e.Handled){DragMove();Save();}};
+
  }
  sealed class FaceMeter:FrameworkElement{
   public static readonly DependencyProperty PositionProperty=DependencyProperty.Register("Position",typeof(double),typeof(FaceMeter),new FrameworkPropertyMetadata(0d,FrameworkPropertyMetadataOptions.AffectsRender));

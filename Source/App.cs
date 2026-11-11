@@ -41,6 +41,7 @@ public sealed partial class Player : Window
  readonly Slider volumeSlider=new(){Minimum=0,Maximum=100,Width=130,Height=22,IsMoveToPointEnabled=true};
  readonly TextBlock volumeLabel=new(){Width=40,VerticalAlignment=VerticalAlignment.Center};
  bool volumeSync=false;
+ readonly TextBlock audioHint=new(){FontSize=11,TextWrapping=TextWrapping.Wrap};
  readonly ComboBox audioTargets=new(){MinWidth=200,MaxWidth=300};
  string audioTarget="",audioSource="";
  readonly Border seekHit=new(){Background=Brushes.Transparent,Cursor=System.Windows.Input.Cursors.Hand};
@@ -50,7 +51,7 @@ public sealed partial class Player : Window
  bool expanded=false,seeking=false,updatingSeek=false,commandPending=false;
  string seekTrack="";
  void SetSeekFromPointer(double x){seek.Value=seek.Minimum+Math.Clamp((x-9)/Math.Max(1,seek.ActualWidth-18),0,1)*(seek.Maximum-seek.Minimum);}
- void SetExpanded(bool value){expanded=value;details.Visibility=value?Visibility.Visible:Visibility.Collapsed;Width=(deviceFace!=null?Math.Max(deviceFace.Width+16+2*appearance.BorderWidth,value?350:0):value?350:300)*appearance.Scale;Height=(deviceFace!=null?deviceFace.Height+16+2*appearance.BorderWidth+(value?152:0):value?280:144)*appearance.Scale;Top=Math.Min(Top,SystemParameters.WorkArea.Bottom-Height);}
+ void SetExpanded(bool value){expanded=value;details.Visibility=value?Visibility.Visible:Visibility.Collapsed;Width=(deviceFace!=null?Math.Max(deviceFace.Width+16+2*appearance.BorderWidth,value?350:0):value?350:300)*appearance.Scale;Height=(deviceFace!=null?deviceFace.Height+16+2*appearance.BorderWidth+(value?216:0):value?350:144)*appearance.Scale;Top=Math.Min(Top,SystemParameters.WorkArea.Bottom-Height);}
  async Task Seek(){
   if(session==null||!seek.IsEnabled||seekTrack!=track)return;
   try{if(!await session.TryChangePlaybackPositionAsync(TimeSpan.FromSeconds(seek.Value).Ticks))status.Text="Яндекс Музыка отклонила перемотку.";}catch{status.Text="Перемотка недоступна.";}
@@ -63,12 +64,27 @@ public sealed partial class Player : Window
   var style=(Style)System.Windows.Markup.XamlReader.Parse("<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Setter Property='Foreground' Value='#46505F'/><Setter Property='Background' Value='#F8F9FB'/><Setter Property='FontSize' Value='16'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'><Border Name='B' Background='{TemplateBinding Background}' CornerRadius='10' Padding='{TemplateBinding Padding}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='B' Property='Background' Value='#DFE8F5'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter TargetName='B' Property='Background' Value='#C7D7EE'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='0.35'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>");
   Resources.Add(typeof(WButton),style);title.Foreground=new SolidColorBrush(Color.FromRgb(45,53,66));artist.Foreground=Brushes.SlateGray;auto.Foreground=Brushes.DimGray;
   seek.Template=(ControlTemplate)System.Windows.Markup.XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Slider'><Grid Margin='3,0' Background='Transparent'><Border Height='4' Background='#CDD4DF' CornerRadius='2' VerticalAlignment='Center'/><Track Name='PART_Track'><Track.DecreaseRepeatButton><RepeatButton Command='Slider.DecreaseLarge'><RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Height='4' Background='{DynamicResource AccentBrush}' CornerRadius='2'/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.DecreaseRepeatButton><Track.Thumb><Thumb Width='12' Height='12'><Thumb.Template><ControlTemplate TargetType='Thumb'><Ellipse Fill='#FFFFFF' Stroke='#A3B2C7' StrokeThickness='1'/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Command='Slider.IncreaseLarge'><RepeatButton.Template><ControlTemplate TargetType='RepeatButton'><Border Background='Transparent'/></ControlTemplate></RepeatButton.Template></RepeatButton></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate>");
+  Point? dragOrigin=null;
+  PreviewMouseLeftButtonDown+=(_,e)=>{
+   dragOrigin=null;
+   for(var node=e.OriginalSource as DependencyObject;node is Visual;node=VisualTreeHelper.GetParent(node)){
+    if(node is Slider or ComboBox or CheckBox ||node==seekHit||node is FaceMeter)return;
+   }
+   dragOrigin=e.GetPosition(this);
+  };
+  PreviewMouseMove+=(_,e)=>{
+   if(e.LeftButton!=System.Windows.Input.MouseButtonState.Pressed){dragOrigin=null;return;}
+   if(dragOrigin is not Point start)return;
+   var delta=e.GetPosition(this)-start;
+   if(Math.Abs(delta.X)<SystemParameters.MinimumHorizontalDragDistance&&Math.Abs(delta.Y)<SystemParameters.MinimumVerticalDragDistance)return;
+   dragOrigin=null;System.Windows.Input.Mouse.Capture(null);e.Handled=true;DragMove();Save();
+  };
   var stack=new StackPanel();body.Child=stack;
   var header=new DockPanel{Margin=new Thickness(0,0,0,4)};
   var close=Button("×",()=>Hide());DockPanel.SetDock(close,Dock.Right);header.Children.Add(close);
   var expand=Button("⋯",()=>SetExpanded(!expanded));expand.ToolTip="Развернуть / свернуть настройки";DockPanel.SetDock(expand,Dock.Right);header.Children.Add(expand);
   var pin=Button("",()=>{Topmost=!Topmost;UpdatePin();Save();});pinButton=pin;UpdatePin();DockPanel.SetDock(pin,Dock.Right);header.Children.Add(pin);
-  var name=new TextBlock{Text="mini payer",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);header.MouseLeftButtonDown+=(_,e)=>{if(e.OriginalSource==name||e.OriginalSource==header){DragMove();Save();}};stack.Children.Add(header);
+  var name=new TextBlock{Text="mini payer",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);stack.Children.Add(header);
   var row=new DockPanel();var art=new Border{Width=52,Height=52,Background=new SolidColorBrush(Color.FromRgb(39,57,76)),Margin=new Thickness(0,0,10,0),Child=cover};DockPanel.SetDock(art,Dock.Left);row.Children.Add(art);
   var info=new StackPanel();info.Children.Add(title);info.Children.Add(artist);var controls=new StackPanel{Orientation=System.Windows.Controls.Orientation.Horizontal,Margin=new Thickness(0,6,0,0)};
   foreach(var b in new[]{prev,play,next}){b.Margin=new Thickness(0,0,6,0);b.Height=26;b.Width=36;controls.Children.Add(b);}
@@ -83,9 +99,9 @@ public sealed partial class Player : Window
   prev.Click+=async(_,_)=>await Command(0);play.Click+=async(_,_)=>await Command(1);next.Click+=async(_,_)=>await Command(2);
   var volume=new StackPanel{Orientation=System.Windows.Controls.Orientation.Horizontal,Margin=new Thickness(0,10,0,6)};
   volume.Children.Add(new TextBlock{Text="Громкость приложения",Foreground=Brushes.DimGray,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)});
-  volumeSlider.Template=seek.Template;volume.Children.Add(volumeSlider);volume.Children.Add(volumeLabel);details.Children.Add(volume);details.Children.Add(audioTargets);audioTargets.ToolTip="Выберите аудиоприложение. Для браузера меняется громкость всех его вкладок.";audioTargets.SelectionChanged+=(_,_)=>{if(!volumeSync)audioTarget=audioTargets.SelectedItem as string??"";};
-  volumeSlider.ValueChanged+=(_,_)=>{volumeLabel.Text=$"{volumeSlider.Value:0}%";if(!volumeSync){try{Audio.Set(audioTarget,volumeSlider.Value);}catch{status.Text="Не удалось изменить громкость приложения.";}}};
-  sources.SelectionChanged+=(_,_)=>{if(refreshing)return;session=sources.SelectedIndex>=0?sessions[sources.SelectedIndex]:null;SetMediaPlaying(false);preferred=session?.SourceAppUserModelId??"";track="";Save();};details.Children.Add(sources);details.Children.Add(auto);details.Children.Add(status);stack.Children.Add(details);
+  volumeSlider.Template=seek.Template;volume.Children.Add(volumeSlider);volume.Children.Add(volumeLabel);details.Children.Add(new TextBlock{Text="Источник трека и кнопок",FontWeight=FontWeights.SemiBold});details.Children.Add(sources);details.Children.Add(new TextBlock{Text="Приложение в микшере Windows",FontWeight=FontWeights.SemiBold,Margin=new Thickness(0,8,0,2)});details.Children.Add(audioTargets);details.Children.Add(volume);details.Children.Add(audioHint);audioTargets.ToolTip="Выберите аудиоприложение. Для браузера меняется громкость всех его вкладок.";audioTargets.SelectionChanged+=(_,_)=>{if(!volumeSync)audioTarget=audioTargets.SelectedItem as string??"";};
+  volumeSlider.ValueChanged+=(_,_)=>{volumeLabel.Text=$"{volumeSlider.Value:0}%";if(!volumeSync){try{Audio.Set(audioTarget,volumeSlider.Value);}catch{audioHint.Text="Не удалось изменить громкость приложения.";}}};
+  sources.SelectionChanged+=(_,_)=>{if(refreshing)return;session=sources.SelectedIndex>=0?sessions[sources.SelectedIndex]:null;SetMediaPlaying(false);preferred=session?.SourceAppUserModelId??"";track="";Save();};details.Children.Add(auto);details.Children.Add(status);stack.Children.Add(details);
   Width=410;Foreground=Brushes.DimGray;SetExpanded(false);
   auto.Checked+=(_,_)=>{shownByUser=false;Save();};auto.Unchecked+=(_,_)=>{shownByUser=true;Save();};
   tray=new(){Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppContext.BaseDirectory,"Player.ico")),Text="mini payer",Visible=true};
@@ -121,15 +137,15 @@ public sealed partial class Player : Window
    if(expanded&&!volumeSlider.IsMouseCaptureWithin){try{
  volumeSync=true;var entries=Audio.List();var source=session?.SourceAppUserModelId??"";
  if(audioSource!=source){audioSource=source;audioTarget="";}
- if(string.IsNullOrEmpty(audioTarget))audioTarget=Audio.Match(source,entries)??"";
+ if(!entries.Any(e=>e.Name==audioTarget))audioTarget=Audio.Match(source,entries)??"";
  if(!entries.Select(e=>e.Name).SequenceEqual(audioTargets.Items.Cast<string>())){audioTargets.Items.Clear();foreach(var entry in entries)audioTargets.Items.Add(entry.Name);}
  audioTargets.SelectedItem=audioTarget;var selectedAudio=entries.FirstOrDefault(e=>e.Name==audioTarget);
- volumeSlider.IsEnabled=selectedAudio!=null;if(selectedAudio!=null)volumeSlider.Value=selectedAudio.Volume;else volumeLabel.Text="—";
- }catch{volumeSlider.IsEnabled=false;volumeLabel.Text="—";}finally{volumeSync=false;}}
+ volumeSlider.IsEnabled=selectedAudio!=null;audioHint.Text=selectedAudio!=null?"":entries.Count==0?"Включите звук в Яндекс Музыке, чтобы она появилась в микшере.":"Выберите приложение для регулировки громкости.";if(selectedAudio!=null){volumeSlider.Value=selectedAudio.Volume;volumeLabel.Text=$"{selectedAudio.Volume:0}%";}else volumeLabel.Text="—";
+ }catch{audioHint.Text="Микшер Windows недоступен.";volumeSlider.IsEnabled=false;volumeLabel.Text="—";}finally{volumeSync=false;}}
    var list=manager.GetSessions().ToList();
    if(!list.SequenceEqual(sessions)){
     var old=session;refreshing=true;sessions=list;sources.Items.Clear();
-    foreach(var s in sessions){string label=s.SourceAppUserModelId;try{var m=await s.TryGetMediaPropertiesAsync();if(!string.IsNullOrWhiteSpace(m.Title))label+=" · "+m.Title;}catch{}sources.Items.Add(label);}
+    foreach(var s in sessions){string label=s.SourceAppUserModelId.Contains("yandex",StringComparison.OrdinalIgnoreCase)&&s.SourceAppUserModelId.Contains("music",StringComparison.OrdinalIgnoreCase)?"Яндекс Музыка":s.SourceAppUserModelId;try{var m=await s.TryGetMediaPropertiesAsync();if(!string.IsNullOrWhiteSpace(m.Title))label+=" · "+m.Title;}catch{}sources.Items.Add(label);}
     var index=old==null?-1:sessions.IndexOf(old);
     if(index<0)index=sessions.FindIndex(s=>s.SourceAppUserModelId==preferred);
     if(index<0)index=sessions.FindIndex(s=>s.SourceAppUserModelId.Contains("yandex",StringComparison.OrdinalIgnoreCase)&&s.SourceAppUserModelId.Contains("music",StringComparison.OrdinalIgnoreCase));
