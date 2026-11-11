@@ -45,44 +45,82 @@ public sealed partial class Player
  }
  void Customize(bool preview=false){
   if(customizeWindow!=null){customizeWindow.Activate();return;}
-  var original=appearance;bool saved=false;var w=new Window{Title="mini payer · Кастомизация",Width=410,Height=640,ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterScreen,Topmost=true,Background=Brushes.WhiteSmoke};customizeWindow=w;
-  var panel=new StackPanel{Margin=new Thickness(22),Background=Brushes.WhiteSmoke};var shell=new DockPanel{Background=Brushes.WhiteSmoke};var scroll=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};w.Content=shell;
-  void Label(string text)=>panel.Children.Add(new TextBlock{Text=text,Margin=new Thickness(0,8,0,6)});
-  Label("Тема");var theme=new ComboBox{ItemsSource=Themes,SelectedItem=appearance.Theme};panel.Children.Add(theme);
-  var colorRow=new StackPanel{Orientation=Orientation.Horizontal};panel.Children.Add(colorRow);
-  ColorWheel AddPicker(string name,string initial,Action<string> update){
-   var group=new StackPanel{Width=110,Margin=new Thickness(0,12,8,0)};colorRow.Children.Add(group);group.Children.Add(new TextBlock{Text=name,Margin=new Thickness(0,0,0,6)});
-   var wheel=new ColorWheel();wheel.SetColor(initial);group.Children.Add(wheel);
-   group.Children.Add(new TextBlock{Text="Яркость",FontSize=10});var brightness=new Slider{Minimum=0,Maximum=1,Value=wheel.Value};group.Children.Add(brightness);
-   var rgb=new TextBlock{FontSize=10,TextWrapping=TextWrapping.Wrap,Text=initial};group.Children.Add(rgb);
-   wheel.Changed+=hex=>{var c=(Color)ColorConverter.ConvertFromString(hex);rgb.Text=$"{hex}\nRGB {c.R}, {c.G}, {c.B}";update(hex);ApplyAppearance();};
-   bool sync=false;wheel.LoadedColor+=hex=>{sync=true;brightness.Value=wheel.Value;rgb.Text=hex;sync=false;};brightness.ValueChanged+=(_,_)=>{if(sync)return;wheel.Value=brightness.Value;wheel.Publish();};return wheel;
+  var original=appearance;
+  bool saved=false, syncing=false;
+  var ink=BrushOf("#292535");var muted=BrushOf("#645E71");var purple=BrushOf("#6544A0");
+  var w=new Window{Title="mini payer · Оформление",Width=Math.Min(552,SystemParameters.WorkArea.Width),Height=Math.Min(692,SystemParameters.WorkArea.Height),WindowStartupLocation=WindowStartupLocation.CenterScreen,Topmost=true,Background=BrushOf("#F8F6FA"),Foreground=ink,FontFamily=new FontFamily("Segoe UI")};
+  customizeWindow=w;
+  var shell=new DockPanel();w.Content=new Border{Background=w.Background,Padding=new Thickness(20,14,20,12),Child=shell};
+  var header=new StackPanel();DockPanel.SetDock(header,Dock.Top);shell.Children.Add(header);
+  TextBlock Text(string value,double size,Brush color,bool bold=false)=>new(){Text=value,FontSize=size,Foreground=color,FontWeight=bold?FontWeights.SemiBold:FontWeights.Normal,TextWrapping=TextWrapping.Wrap};
+  header.Children.Add(Text("Оформление плеера",25,ink,true));
+  header.Children.Add(Text("Изменения сразу видны в плеере.",13,muted));
+  var skin=(ControlTemplate)System.Windows.Markup.XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Name='Frame' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='1' CornerRadius='9' Padding='{TemplateBinding Padding}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Frame' Property='BorderBrush' Value='#7653AD'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter TargetName='Frame' Property='Opacity' Value='.78'/></Trigger></ControlTemplate.Triggers></ControlTemplate>");
+  Button Btn(object label)=>new(){Content=label,Template=skin,Background=Brushes.White,Foreground=ink,BorderBrush=BrushOf("#DDD8E4"),Padding=new Thickness(12,8,12,8),Cursor=System.Windows.Input.Cursors.Hand};
+  void Mark(Button b,bool selected){b.Background=selected?BrushOf("#EEE7FA"):Brushes.White;b.BorderBrush=selected?purple:BrushOf("#DDD8E4");}
+  var nav=new System.Windows.Controls.Primitives.UniformGrid{Rows=1,Margin=new Thickness(0,14,0,10)};header.Children.Add(nav);
+  var footer=new DockPanel{Margin=new Thickness(0,12,0,0)};DockPanel.SetDock(footer,Dock.Bottom);shell.Children.Add(footer);
+  var save=Btn("Сохранить");save.Background=purple;save.Foreground=Brushes.White;
+  var cancel=Btn("Отмена");cancel.Margin=new Thickness(0,0,8,0);
+  foreach(var b in new[]{save,cancel}){DockPanel.SetDock(b,Dock.Right);footer.Children.Add(b);}
+  var reset=Btn("Сбросить");reset.HorizontalAlignment=HorizontalAlignment.Left;footer.Children.Add(reset);
+  var scroll=new ScrollViewer{VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};shell.Children.Add(scroll);
+  var gallery=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};
+  var colors=new StackPanel();var geometry=new StackPanel();
+  var pages=new FrameworkElement[]{gallery,colors,geometry};var tabs=new Button[3];
+  void Page(int index){scroll.Content=pages[index];scroll.ScrollToTop();for(int i=0;i<tabs.Length;i++)Mark(tabs[i],i==index);}
+  string[] names={"Темы","Цвета","Размер и детали"};
+  for(int i=0;i<3;i++){int index=i;var b=tabs[i]=Btn(names[i]);b.Margin=new Thickness(2);nav.Children.Add(b);b.Click+=(_,_)=>Page(index);}
+  var cards=new System.Collections.Generic.Dictionary<string,Button>();
+  StackPanel Card(StackPanel parent,string heading){
+   var box=new StackPanel();box.Children.Add(Text(heading,17,ink,true));
+   parent.Children.Add(new Border{Background=Brushes.White,CornerRadius=new CornerRadius(12),Padding=new Thickness(16),Margin=new Thickness(2,3,2,8),Child=box});return box;
   }
-  var accentWheel=AddPicker("Акцент",appearance.Accent,hex=>appearance=appearance with{Accent=hex});
-  var borderWheel=AddPicker("Рамка",appearance.BorderColor??appearance.Accent,hex=>appearance=appearance with{BorderColor=hex});
-  var backgroundWheel=AddPicker("Фон",appearance.BackgroundColor??ThemeBackground(appearance.Theme),hex=>appearance=appearance with{BackgroundColor=hex});
-  panel.Children.Add(new TextBlock{Text="Тема меняет текстуры, кнопки, шкалы и бегунки. Стекло — полупрозрачное, без размытия рабочего стола.",FontSize=11,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
-  Label("Размер: 85–140%");var scale=new Slider{Minimum=.85,Maximum=1.4,Value=appearance.Scale,TickFrequency=.05,IsSnapToTickEnabled=true};panel.Children.Add(scale);
-  Label("Непрозрачность: 65–100%");var opacity=new Slider{Minimum=.65,Maximum=1,Value=appearance.Alpha};panel.Children.Add(opacity);
-  Label("Форма и обложка");
-  Slider Setting(string name,double min,double max,double value,Action<double> changed){
-   var caption=new TextBlock{Text=$"{name}: {value:0} px",FontSize=11,Margin=new Thickness(0,4,0,0)};panel.Children.Add(caption);
-   var slider=new Slider{Minimum=min,Maximum=max,Value=value,TickFrequency=1,IsSnapToTickEnabled=true};panel.Children.Add(slider);slider.ValueChanged+=(_,_)=>{caption.Text=$"{name}: {slider.Value:0} px";changed(slider.Value);ApplyAppearance();};return slider;
+  var palette=Card(colors,"Палитра");var swatches=new System.Windows.Controls.Primitives.UniformGrid{Rows=1,Margin=new Thickness(0,12,0,10)};palette.Children.Add(swatches);
+  string[] roles={"Акцент","Рамка","Фон"};int role=0;
+  string ColorAt(int i)=>i==0?appearance.Accent:i==1?appearance.BorderColor??appearance.Accent:appearance.BackgroundColor??ThemeBackground(appearance.Theme);
+  var chips=new Button[3];var samples=new Border[3];
+  for(int i=0;i<3;i++){
+   int index=i;var group=new StackPanel();samples[i]=new Border{Height=17,CornerRadius=new CornerRadius(5),BorderThickness=new Thickness(1),BorderBrush=BrushOf("#33808080")};group.Children.Add(samples[i]);group.Children.Add(Text(roles[i],12,ink));
+   var b=chips[i]=Btn(group);b.Margin=new Thickness(2);swatches.Children.Add(b);b.Tag=index;
   }
-  var rounding=Setting("Скругление",0,26,appearance.Round,v=>appearance=appearance with{Round=v});
-  var borderSize=Setting("Толщина рамки (0 — скрыть)",0,4,appearance.BorderWidth,v=>appearance=appearance with{BorderWidth=v});
-  var coverSize=Setting("Размер обложки",40,64,appearance.CoverSize,v=>appearance=appearance with{CoverSize=v});
-  var showArtist=new CheckBox{Content="Показывать исполнителя",IsChecked=appearance.ShowArtist,Margin=new Thickness(0,7,0,0)};panel.Children.Add(showArtist);
-  var showTime=new CheckBox{Content="Показывать время трека",IsChecked=appearance.ShowTime,Margin=new Thickness(0,7,0,0)};panel.Children.Add(showTime);
-  showArtist.Click+=(_,_)=>{appearance=appearance with{ShowArtist=showArtist.IsChecked==true};ApplyAppearance();};showTime.Click+=(_,_)=>{appearance=appearance with{ShowTime=showTime.IsChecked==true};ApplyAppearance();};
-  panel.Children.Add(new TextBlock{Text="Предпросмотр сразу в плеере.\nЗакрытие окна отменяет несохранённые изменения.",FontSize=11,Margin=new Thickness(0,14,0,10)});
-  var row=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(22,8,22,14)};DockPanel.SetDock(row,Dock.Bottom);shell.Children.Add(row);shell.Children.Add(scroll);
-  var reset=new Button{Content="Сброс",Padding=new Thickness(12,6,12,6),Margin=new Thickness(0,0,10,0)};row.Children.Add(reset);
-  var save=new Button{Content="Сохранить",Padding=new Thickness(12,6,12,6)};row.Children.Add(save);
-  theme.SelectionChanged+=(_,_)=>{appearance=appearance with{Theme=(string)theme.SelectedItem,Accent=ThemeAccent((string)theme.SelectedItem),BorderColor=ThemeAccent((string)theme.SelectedItem),BackgroundColor=null,Round=(string)theme.SelectedItem=="Minecraft"?0:20,BorderWidth=(string)theme.SelectedItem=="Minecraft"?3:1};rounding.Value=appearance.Round;borderSize.Value=appearance.BorderWidth;accentWheel.SetColor(appearance.Accent);borderWheel.SetColor(appearance.BorderColor??appearance.Accent);backgroundWheel.SetColor(ThemeBackground(appearance.Theme));ApplyAppearance();};
-  scale.ValueChanged+=(_,_)=>{appearance=appearance with{Scale=scale.Value};ApplyAppearance();};opacity.ValueChanged+=(_,_)=>{appearance=appearance with{Alpha=opacity.Value};ApplyAppearance();};
-  reset.Click+=(_,_)=>{appearance=new();theme.SelectedItem=appearance.Theme;scale.Value=1;opacity.Value=1;rounding.Value=20;borderSize.Value=1;coverSize.Value=52;showArtist.IsChecked=true;showTime.IsChecked=true;accentWheel.SetColor(appearance.Accent);borderWheel.SetColor(appearance.BorderColor??appearance.Accent);backgroundWheel.SetColor(ThemeBackground(appearance.Theme));ApplyAppearance();};
+  var editor=new DockPanel();palette.Children.Add(editor);var wheel=new ColorWheel{Margin=new Thickness(0,4,16,2)};DockPanel.SetDock(wheel,Dock.Left);editor.Children.Add(wheel);
+  var values=new StackPanel{VerticalAlignment=VerticalAlignment.Center};editor.Children.Add(values);var code=Text("",15,ink,true);values.Children.Add(code);values.Children.Add(Text("Яркость",12,muted));var brightness=new Slider{Minimum=0,Maximum=1};values.Children.Add(brightness);
+  brightness.ValueChanged+=(_,_)=>{if(!syncing){wheel.Value=brightness.Value;wheel.Publish();}};
+  wheel.Changed+=hex=>{appearance=role switch{0=>appearance with{Accent=hex},1=>appearance with{BorderColor=hex},_=>appearance with{BackgroundColor=hex}};code.Text=hex;for(int i=0;i<3;i++)samples[i].Background=BrushOf(ColorAt(i));ApplyAppearance();};
+  var form=Card(geometry,"Размер и форма");var updates=new System.Collections.Generic.List<Action>();
+  void Setting(string name,double min,double max,double step,Func<double> read,Action<double> write,bool percent=false){
+   var line=new DockPanel{Margin=new Thickness(0,8,0,0)};form.Children.Add(line);var val=Text("",12,purple,true);DockPanel.SetDock(val,Dock.Right);line.Children.Add(val);line.Children.Add(Text(name,13,ink));
+   var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true};form.Children.Add(slider);
+   System.Windows.Automation.AutomationProperties.SetName(slider,name);
+   void Update(){val.Text=percent?$"{read()*100:0}%":$"{read():0} px";}
+   updates.Add(()=>{slider.Value=read();Update();});slider.ValueChanged+=(_,_)=>{if(syncing)return;write(slider.Value);Update();ApplyAppearance();};
+  }
+  Setting("Масштаб",.85,1.4,.05,()=>appearance.Scale,v=>appearance=appearance with{Scale=v},true);
+  Setting("Непрозрачность",.65,1,.01,()=>appearance.Alpha,v=>appearance=appearance with{Alpha=v},true);
+  Setting("Скругление углов",0,26,1,()=>appearance.Round,v=>appearance=appearance with{Round=v});
+  Setting("Толщина рамки",0,4,1,()=>appearance.BorderWidth,v=>appearance=appearance with{BorderWidth=v});
+  Setting("Размер обложки",40,64,1,()=>appearance.CoverSize,v=>appearance=appearance with{CoverSize=v});
+  var info=Card(geometry,"Информация о треке");
+  var artistCheck=new CheckBox{Content="Исполнитель",Margin=new Thickness(0,8,0,0)};var timeCheck=new CheckBox{Content="Время трека",Margin=new Thickness(0,6,0,0)};
+  info.Children.Add(artistCheck);info.Children.Add(timeCheck);
+  artistCheck.Click+=(_,_)=>{appearance=appearance with{ShowArtist=artistCheck.IsChecked==true};ApplyAppearance();};
+  timeCheck.Click+=(_,_)=>{appearance=appearance with{ShowTime=timeCheck.IsChecked==true};ApplyAppearance();};
+  void Sync(){syncing=true;foreach(var pair in cards)Mark(pair.Value,pair.Key==appearance.Theme);for(int i=0;i<3;i++){samples[i].Background=BrushOf(ColorAt(i));Mark(chips[i],role==i);}code.Text=ColorAt(role);wheel.SetColor(code.Text);brightness.Value=wheel.Value;foreach(var action in updates)action();artistCheck.IsChecked=appearance.ShowArtist;timeCheck.IsChecked=appearance.ShowTime;syncing=false;}
+  foreach(var name in new[]{"Винил","Закат","Карманный LCD"}.Concat(Themes.Where(t=>t is not ("Винил" or "Закат" or "Карманный LCD")))){
+   var content=new StackPanel();var img=new Image{Height=65,Stretch=Stretch.Uniform};
+   using(var stream=typeof(Player).Assembly.GetManifestResourceStream("preview."+name+".png")){
+    if(stream!=null){var bitmap=new System.Windows.Media.Imaging.BitmapImage();bitmap.BeginInit();bitmap.CacheOption=System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;bitmap.StreamSource=stream;bitmap.EndInit();bitmap.Freeze();img.Source=bitmap;}
+   }
+   content.Children.Add(img);var label=Text(name,13,ink,true);label.HorizontalAlignment=HorizontalAlignment.Center;label.Margin=new Thickness(0,5,0,0);content.Children.Add(label);
+   var b=Btn(content);System.Windows.Automation.AutomationProperties.SetName(b,name);b.Margin=new Thickness(3);cards.Add(name,b);gallery.Children.Add(b);
+   b.Click+=(_,_)=>{if(appearance.Theme==name)return;appearance=appearance with{Theme=name,Accent=ThemeAccent(name),BorderColor=ThemeAccent(name),BackgroundColor=null,Round=name=="Minecraft"?0:20,BorderWidth=name=="Minecraft"?3:1};Sync();ApplyAppearance();};
+  }
+  foreach(var chip in chips)chip.Click+=(_,_)=>{role=(int)chip.Tag;Sync();};
+  reset.Click+=(_,_)=>{appearance=new();Sync();ApplyAppearance();};
+  cancel.Click+=(_,_)=>w.Close();cancel.IsCancel=true;
   save.Click+=(_,_)=>{try{Directory.CreateDirectory(Path.GetDirectoryName(AppearancePath)!);File.WriteAllText(AppearancePath,JsonSerializer.Serialize(appearance));saved=true;w.Close();}catch(Exception ex){MessageBox.Show(w,ex.Message,"Не удалось сохранить");}};
-  w.Closed+=(_,_)=>{if(!saved){appearance=original;ApplyAppearance();}customizeWindow=null;};if(!preview){shownByUser=true;Show();w.Show();}
+  w.Closed+=(_,_)=>{if(!saved){appearance=original;ApplyAppearance();}customizeWindow=null;};
+  Sync();Page(0);if(!preview){shownByUser=true;Show();w.Show();}
  }
 }

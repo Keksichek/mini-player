@@ -198,7 +198,7 @@ public sealed partial class Player : Window
    player.volumeSync=true;player.volumeSlider.Value=50;player.volumeSync=false;
    if(args[1].Contains("minecraft"))player.appearance=new Appearance("Minecraft","#8BE878");foreach(var candidate in Themes)if(args[1].Contains(candidate))player.appearance=new Appearance(candidate,ThemeAccent(candidate),Round:candidate=="Minecraft"?0:20);player.ApplyAppearance();if(args[1].Contains("expanded"))player.SetExpanded(true);
    var root=(FrameworkElement)player.Content;root.Measure(new Size(player.Width,player.Height));root.Arrange(new Rect(0,0,player.Width,player.Height));root.UpdateLayout();
-   if(args[1].Contains("custom")){player.Customize(true);root=(FrameworkElement)player.customizeWindow!.Content;player.Width=410;player.Height=640;root.Measure(new Size(410,640));root.Arrange(new Rect(0,0,410,640));root.UpdateLayout();}
+   if(args[1].Contains("custom")){player.Customize(true);root=(FrameworkElement)player.customizeWindow!.Content;player.Width=player.customizeWindow.Width;player.Height=player.customizeWindow.Height;root.Measure(new Size(player.Width,player.Height));root.Arrange(new Rect(0,0,player.Width,player.Height));root.UpdateLayout();}
    var image=new RenderTargetBitmap((int)player.Width,(int)player.Height,96,96,PixelFormats.Pbgra32);image.Render(root);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=System.IO.File.Create(args[1]))encoder.Save(file);player.tray.Dispose();return;
   }
   using var mutex=new System.Threading.Mutex(true,"Local\\YandexMiniPlayer",out var created);if(!created)return;var application=new WApplication();application.Run(new Player());

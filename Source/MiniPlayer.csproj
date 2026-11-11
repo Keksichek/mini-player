@@ -1,3 +1,3 @@
 <Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows10.0.19041.0</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings><AssemblyName>YandexMiniPlayer</AssemblyName></PropertyGroup>
-<PropertyGroup><ApplicationIcon>Player.ico</ApplicationIcon></PropertyGroup><ItemGroup><Content Include="Player.ico" CopyToOutputDirectory="PreserveNewest" /></ItemGroup></Project>
+<PropertyGroup><ApplicationIcon>Player.ico</ApplicationIcon></PropertyGroup><ItemGroup><Content Include="Player.ico" CopyToOutputDirectory="PreserveNewest" /></ItemGroup><ItemGroup><EmbeddedResource Include="../screenshots/*.png" Exclude="../screenshots/*-expanded.png;../screenshots/*preview.png"><LogicalName>preview.%(Filename)%(Extension)</LogicalName></EmbeddedResource></ItemGroup></Project>
