@@ -13,6 +13,14 @@ public sealed partial class Player
 {
  Canvas? deviceFace;
  Button? facePin;
+ ContextMenu AttachPlayerMenu(Button button){
+  var menu=new ContextMenu();
+  void Item(string label,Action action){var item=new MenuItem{Header=label};item.Click+=(_,_)=>action();menu.Items.Add(item);}
+  Item("Развернуть / свернуть",()=>SetExpanded(!expanded));Item("Кастомизация",()=>Customize());Item("Закрепить / открепить",TogglePin);Item("Скрыть",()=>Hide());
+  button.ToolTip="Меню плеера";
+  button.Click+=(_,_)=>{menu.PlacementTarget=button;menu.Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom;menu.IsOpen=true;};
+  return menu;
+ }
  void TogglePin(){Topmost=!Topmost;UpdatePin();Save();}
  void UpdateFacePin(){
   if(facePin==null)return;
@@ -82,10 +90,10 @@ public sealed partial class Player
    img.SetBinding(Image.SourceProperty,new Binding("Source"){Source=cover});Put(img,x,y,size,size);
   }
   var buttonSkin=(ControlTemplate)XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Background='{TemplateBinding Background}' CornerRadius='"+(lcd?"4":"24")+"' BorderBrush='#70FFFFFF' BorderThickness='1'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter Property='Opacity' Value='.78'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter Property='Opacity' Value='.60'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.46'/></Trigger></ControlTemplate.Triggers></ControlTemplate>");
-  Button Key(double x,double y,double w,double h,string label,string hint,Brush fill,Action action){
+  Button Key(double x,double y,double w,double h,string label,string hint,Brush fill,Action? action=null){
    var b=new Button{Content=label,Foreground=B("#302B2E"),Background=fill,Template=buttonSkin,ToolTip=hint,Cursor=Cursors.Hand};
    System.Windows.Automation.AutomationProperties.SetName(b,hint);
-   b.Click+=(_,_)=>action();Put(b,x,y,w,h);return b;
+   if(action!=null)b.Click+=(_,_)=>action();Put(b,x,y,w,h);return b;
   }
   void Transport(Button src,double x,double y,double w,double h,Brush fill,string hint){
    var b=Key(x,y,w,h,"",hint,fill,()=>src.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)));
@@ -130,7 +138,7 @@ public sealed partial class Player
    var solar=new Ellipse{Width=45,Height=45,Fill=Gradient("#FFB154","#F66936")};Canvas.SetLeft(solar,28);Canvas.SetTop(solar,14);landscape.Children.Add(solar);
    foreach(var (g,c) in new[]{("M 0,51 Q 19,45 48,68 Q 70,44 92,53 L 92,92 L 0,92 Z","#E9854F"),("M 0,59 Q 35,82 60,66 Q 80,57 92,62 L 92,92 L 0,92 Z","#C35C40"),("M 0,83 Q 24,84 54,71 Q 75,63 92,74 L 92,92 L 0,92 Z","#9B4540")})landscape.Children.Add(new Path{Data=Geometry.Parse(g),Fill=B(c)});
    landscape.Width=landscape.Height=92;var view=new Viewbox{Child=landscape};Put(view,7,12,d,d);Art(7,12,d,d*.13);
-   var meta=new TextBlock{Text="♪   СЕЙЧАС В ЭФИРЕ",FontSize=9,FontWeight=FontWeights.Bold,Foreground=B("#9B4127")};Put(meta,122,19,140,18);
+   var meta=new TextBlock{Text="♪   В ЭФИРЕ",FontSize=9,FontWeight=FontWeights.Bold,Foreground=B("#9B4127")};Put(meta,122,10,90,16);
    Caption(title,122,42,185,16,ink,true);if(appearance.ShowArtist)Caption(artist,122,68,184,11,ink);
    if(appearance.ShowTime)Caption(timeLabel,122,108,170,10,ink);
    Transport(prev,85,133,32,31,Brushes.Transparent,"Предыдущий трек");Transport(play,138,122,44,44,accent,"Воспроизведение / пауза");Transport(next,200,133,32,31,Brushes.Transparent,"Следующий трек");
@@ -154,12 +162,9 @@ public sealed partial class Player
   meter.MouseLeftButtonUp+=async(_,e)=>{if(!meter.IsMouseCaptured)return;Locate(e);meter.ReleaseMouseCapture();e.Handled=true;await Seek();};
   meter.LostMouseCapture+=(_,_)=>seeking=false;
   meter.KeyDown+=async(_,e)=>{if(!seek.IsEnabled||e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right))return;seekTrack=track;seek.Value+=e.Key==System.Windows.Input.Key.Left?-5:5;e.Handled=true;await Seek();};
-  var menu=new ContextMenu();
-  void Item(string label,Action action){var item=new MenuItem{Header=label};item.Click+=(_,_)=>action();menu.Items.Add(item);}
-  Item("Развернуть / свернуть",()=>SetExpanded(!expanded));Item("Кастомизация",()=>Customize());Item("Закрепить / открепить",TogglePin);Item("Скрыть",()=>Hide());
-  face.ContextMenu=menu;
-  facePin=Key(vinyl?216:sun?202:137,vinyl?86:sun?4:92,80,lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
-  Key(vinyl?252:sun?286:198,vinyl?56:sun?4:10,26,22,"⋯","Меню плеера",vinyl?metal:B("#EAE3DB"),()=>menu.IsOpen=true);
+  facePin=Key(vinyl?216:sun?211:137,vinyl?86:sun?4:92,sun?70:80,lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
+  var more=Key(vinyl?252:sun?286:198,vinyl?56:sun?4:10,26,22,"⋯","Меню плеера",vinyl?metal:B("#EAE3DB"));
+  face.ContextMenu=AttachPlayerMenu(more);
 
  }
  sealed class FaceMeter:FrameworkElement{

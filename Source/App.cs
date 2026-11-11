@@ -82,7 +82,7 @@ public sealed partial class Player : Window
   var stack=new StackPanel();body.Child=stack;
   var header=new DockPanel{Margin=new Thickness(0,0,0,4)};
   var close=Button("×",()=>Hide());DockPanel.SetDock(close,Dock.Right);header.Children.Add(close);
-  var expand=Button("⋯",()=>SetExpanded(!expanded));expand.ToolTip="Развернуть / свернуть настройки";DockPanel.SetDock(expand,Dock.Right);header.Children.Add(expand);
+  var expand=Button("⋯");AttachPlayerMenu(expand);DockPanel.SetDock(expand,Dock.Right);header.Children.Add(expand);
   var pin=Button("",TogglePin);pinButton=pin;UpdatePin();DockPanel.SetDock(pin,Dock.Right);header.Children.Add(pin);
   var name=new TextBlock{Text="mini payer",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);stack.Children.Add(header);
   var row=new DockPanel();var art=new Border{Width=52,Height=52,Background=new SolidColorBrush(Color.FromRgb(39,57,76)),Margin=new Thickness(0,0,10,0),Child=cover};DockPanel.SetDock(art,Dock.Left);row.Children.Add(art);
@@ -112,7 +112,7 @@ public sealed partial class Player : Window
   Loaded+=async(_,_)=>{LoadSettings();LoadAppearance();try{manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();await Refresh();timer.Start();}catch(Exception ex){status.Text="Нет доступа к медиасессиям Windows: "+ex.Message;}};
   timer.Tick+=async(_,_)=>await Refresh();
  }
- static WButton Button(string label,Action action){var b=new WButton{Content=label,MinWidth=30,Height=26,Padding=new Thickness(5,0,5,0)};b.Click+=(_,_)=>action();return b;}
+ static WButton Button(string label,Action? action=null){var b=new WButton{Content=label,MinWidth=30,Height=26,Padding=new Thickness(5,0,5,0)};if(action!=null)b.Click+=(_,_)=>action();return b;}
  async Task Command(int command){
   var selected=session;if(selected==null||commandPending)return;commandPending=true;
   try{
