@@ -1,0 +1,9 @@
+*.lnk
+*.pdb
+[Bb]in/
+[Oo]bj/
+.vs/
+.vscode/
+*.user
+settings.json
+appearance.json
