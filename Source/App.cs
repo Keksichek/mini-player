@@ -108,7 +108,7 @@ public sealed partial class Player : Window
   var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Показать плеер",null,(_,_)=>Dispatcher.Invoke(()=>{shownByUser=true;Show();Activate();}));menu.Items.Add("Кастомизация",null,(_,_)=>Dispatcher.Invoke(()=>Customize()));menu.Items.Add("Выход",null,(_,_)=>Dispatcher.Invoke(()=>{closing=true;Close();}));tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>{shownByUser=true;Show();Activate();};
   motionTimer.Tick+=(_,_)=>RenderMotion();
   IsVisibleChanged+=(_,_)=>SyncMotion();
-  Closing+=(_,_)=>{motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
+  Closing+=(_,_)=>{peakReader.Dispose();motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
   Loaded+=async(_,_)=>{LoadSettings();LoadAppearance();try{manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();await Refresh();timer.Start();}catch(Exception ex){status.Text="Нет доступа к медиасессиям Windows: "+ex.Message;}};
   timer.Tick+=async(_,_)=>await Refresh();
  }
@@ -197,6 +197,15 @@ public sealed partial class Player : Window
    player.seek.Maximum=240;player.seek.Value=95;player.seek.IsEnabled=true;
    player.volumeSync=true;player.volumeSlider.Value=50;player.volumeSync=false;
    if(args[1].Contains("minecraft"))player.appearance=new Appearance("Minecraft","#8BE878");foreach(var candidate in Themes)if(args[1].Contains(candidate))player.appearance=new Appearance(candidate,ThemeAccent(candidate),Round:candidate=="Minecraft"?0:20);player.Topmost=!args[1].Contains("-unpinned");player.ApplyAppearance();if(args[1].Contains("expanded"))player.SetExpanded(true);
+   if(player.deviceFace!=null && player.appearance.Theme is not ("Винил" or "Закат" or "Карманный LCD") && !args[1].Contains("custom")){
+    var artwork=new DrawingGroup();using(var dc=artwork.Open()){
+     dc.DrawRectangle(new LinearGradientBrush(Color.FromRgb(44,53,88),Color.FromRgb(232,156,130),90),null,new Rect(0,0,100,100));
+     dc.DrawEllipse(BrushOf("#FFE0A9"),null,new Point(67,37),13,13);
+     dc.DrawGeometry(BrushOf("#5C667D"),null,Geometry.Parse("M0,69 L27,40 50,59 61,48 100,75 V100 H0Z"));
+     dc.DrawGeometry(BrushOf("#293F51"),null,Geometry.Parse("M0,85 L28,66 45,74 70,52 100,63 V100 H0Z"));
+     for(int j=0;j<3;j++)dc.DrawRectangle(BrushOf("#EFDFC5"),null,new Rect(9,10+j*3,22-j*4,1));
+    }player.cover.Source=new DrawingImage(artwork);
+   }
    var root=(FrameworkElement)player.Content;root.Measure(new Size(player.Width,player.Height));root.Arrange(new Rect(0,0,player.Width,player.Height));root.UpdateLayout();
    if(args[1].Contains("custom")){player.Customize(true);root=(FrameworkElement)player.customizeWindow!.Content;player.Width=player.customizeWindow.Width;player.Height=player.customizeWindow.Height;root.Measure(new Size(player.Width,player.Height));root.Arrange(new Rect(0,0,player.Width,player.Height));root.UpdateLayout();}
    var image=new RenderTargetBitmap((int)player.Width,(int)player.Height,96,96,PixelFormats.Pbgra32);image.Render(root);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=System.IO.File.Create(args[1]))encoder.Save(file);player.tray.Dispose();return;

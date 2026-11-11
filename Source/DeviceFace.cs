@@ -38,17 +38,24 @@ public sealed partial class Player
  RotateTransform? platterRotation;
  FaceMeter? activeMeter;
  SceneMotion? sceneMotion;
+ readonly Audio.PeakReader peakReader=new();
+ double lastSample=-1;
  bool mediaPlaying;
  readonly System.Diagnostics.Stopwatch motionTime=new();
  readonly System.Windows.Threading.DispatcherTimer motionTimer=new(){Interval=TimeSpan.FromMilliseconds(33)};
  void SyncMotion(){
   bool run=mediaPlaying&&IsVisible&&!closing&&(platterRotation!=null||sceneMotion!=null||activeMeter?.Animated==true);
   if(run){motionTime.Start();motionTimer.Start();}
-  else{motionTime.Stop();motionTimer.Stop();}
+  else{motionTime.Stop();motionTimer.Stop();peakReader.Dispose();if(sceneMotion?.UsesAudio==true)sceneMotion.Silence();}
  }
  void RenderMotion(){
   double seconds=motionTime.Elapsed.TotalSeconds;
-  if(sceneMotion!=null){sceneMotion.Phase=seconds;sceneMotion.InvalidateVisual();}
+  if(sceneMotion!=null){
+   if(sceneMotion.UsesAudio&&mediaPlaying&&IsVisible&&seconds-lastSample>=.065){
+    var source=session?.SourceAppUserModelId??"";
+    sceneMotion.Sample(peakReader.Read(audioSource==source?audioTarget:"",source));lastSample=seconds;
+   }
+   sceneMotion.Phase=seconds;sceneMotion.InvalidateVisual();}
   if(platterRotation!=null)platterRotation.Angle=seconds*45%360;
   else if(activeMeter!=null&&activeMeter.Animated){activeMeter.Phase=seconds*2;activeMeter.InvalidateVisual();}
  }
@@ -60,7 +67,7 @@ public sealed partial class Player
   var classic=!(vinyl||sun||lcd);
   StudioFace? studio=classic?StudioFace.For(appearance.Theme):null;
   stack.Children[0].Visibility=stack.Children[1].Visibility=Visibility.Collapsed;
-  facePin=null;platterRotation=null;activeMeter=null;sceneMotion=null;
+  peakReader.Dispose();facePin=null;platterRotation=null;activeMeter=null;sceneMotion=null;
 
   Brush B(string c)=>BrushOf(c);
   LinearGradientBrush Gradient(string first,string last,double angle=90)=>new((Color)ColorConverter.ConvertFromString(first),(Color)ColorConverter.ConvertFromString(last),angle);
@@ -121,16 +128,33 @@ public sealed partial class Player
   if(studio!=null){
    var scene=studio.Scene;
    Put(new StudioArt(appearance.Theme),scene.X,scene.Y,scene.Width,scene.Height);
-   if(appearance.Theme is "Кофе" or "Лес" or "Терминал" or "Ретро"){
-    sceneMotion=new SceneMotion(appearance.Theme);Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
+   string theme=appearance.Theme;
+   if(theme is "Кофе" or "Лес" or "Терминал" or "Ретро" or "Лаванда" or "Персик" or "Ночной океан" or "Тёмная" or "Minecraft"){
+    sceneMotion=new SceneMotion(theme);
+    if(theme=="Minecraft"){Box(88,25,116,35,B("#BE303626"),1);Put(sceneMotion,91,26,110,32);}
+    else Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
    }
-   var pos=studio.Artwork;double artSize=appearance.CoverSize*.85;
-   if(appearance.Theme=="Кофе"||appearance.Theme=="Лаванда"||appearance.Theme=="Ретро"||appearance.Theme=="Терминал"||appearance.Theme=="Персик"||appearance.Theme=="Minecraft"){
-    Box(pos.X,pos.Y,artSize,artSize,B(studio.Key),studio.Radius/2);
-    for(int i=0;i<5;i++)Box(pos.X+artSize*(.17+i*.14),pos.Y+artSize*(.5-.06*(i%3)),artSize*.08,artSize*(.15+.12*(i%3)),B(studio.Paper),1);
-   }
-   Art(pos.X,pos.Y,appearance.CoverSize*.85,studio.Radius/2);
-   int titleSize=appearance.Theme=="Светлая"||appearance.Theme=="Тёмная"?18:15;
+   var pos=studio.Artwork;
+   var (factor,limit,radius,edge,mat)=theme switch{
+    "Кофе"=>(1.1,65d,1d,4d,"#FFEFCC"),
+    "Лаванда"=>(1.14,62d,5d,3d,"#FFF9FF"),
+    "Лес"=>(1.46,88d,2d,4d,"#E0DBBF"),
+    "Minecraft"=>(1.14,66d,0d,4d,"#847E72"),
+    "Ночной океан"=>(1.18,68d,9d,2d,"#7596A5"),
+    "Персик"=>(1.15,65d,14d,3d,"#FFF6D9"),
+    "Ретро"=>(1.3,76d,1d,4d,"#F7E9CC"),
+    "Терминал"=>(.98,58d,2d,2d,"#79947E"),
+    "Стекло"=>(1.32,78d,11d,3d,"#ECFCFF"),
+    "Тёмная"=>(1.6,97d,5d,2d,"#514D58"),
+    _=>(1.32,79d,32d,3d,"#FCFAF4")
+   };
+   double artSize=Math.Min(limit,appearance.CoverSize*factor);
+   var frame=new Canvas{Width=artSize+2*edge,Height=artSize+2*edge,RenderTransformOrigin=new Point(.5,.5)};
+   if(theme is "Кофе" or "Лес" or "Ретро")frame.RenderTransform=new RotateTransform(theme=="Ретро"?3:-4);
+   Put(frame,pos.X,pos.Y,frame.Width,frame.Height);drawingLayer=frame;
+   Box(0,0,frame.Width,frame.Height,B(mat),radius+edge);Box(edge,edge,artSize,artSize,B(studio.Key),radius);
+   var note=new TextBlock{Text="♫",FontSize=artSize*.45,Foreground=B("#4C4B49"),TextAlignment=TextAlignment.Center};Put(note,edge,edge+artSize*.19,artSize,artSize*.7);
+   Art(edge,edge,artSize,radius);drawingLayer=face;   int titleSize=appearance.Theme=="Светлая"||appearance.Theme=="Тёмная"?18:15;
    Caption(title,studio.Title.X,studio.Title.Y,studio.TextWidth,titleSize,ink,true);
    if(appearance.ShowArtist)Caption(artist,studio.Title.X,studio.Title.Y+titleSize+5,studio.TextWidth,11,ink);
    if(appearance.ShowTime)Caption(timeLabel,studio.Clock.X,studio.Clock.Y,90,10,ink);
@@ -199,7 +223,7 @@ public sealed partial class Player
   public double Phase {get;set;}
   readonly bool arc,lcd;readonly Brush accent,idle;
   readonly string style;
-  public bool Animated=>!arc && style is ("" or "Лаванда" or "Лес" or "Ночной океан" or "Тёмная");
+  public bool Animated=>!arc && style is ("" or "Лаванда" or "Лес" or "Ночной океан");
   public FaceMeter(bool arc,bool lcd,Brush accent,string style){this.style=style;this.arc=arc;this.lcd=lcd;this.accent=accent;idle=BrushOf(lcd?"#79827A":"#D6BEB4");}
   protected override void OnRender(DrawingContext dc){
    double w=ActualWidth,h=ActualHeight,f=Math.Clamp((double)GetValue(PositionProperty)/Math.Max(1,(double)GetValue(DurationProperty)),0,1);
@@ -215,7 +239,7 @@ public sealed partial class Player
      for(double x=0;x<w;x+=step){double height=style=="Ретро"?(x%20==0?9:4):7;dc.DrawRectangle(x<=w*f?accent:idle,null,new Rect(x,(h-height)/2,Math.Min(w-x,step-2),height));}
      return;
     }
-    if(style is "Светлая" or "Кофе" or "Персик" or "Стекло"){
+    if(style is "Тёмная" or "Светлая" or "Кофе" or "Персик" or "Стекло"){
      double y=h/2;dc.DrawRoundedRectangle(idle,null,new Rect(0,y-1,w,2),1,1);
      dc.DrawRoundedRectangle(accent,null,new Rect(0,y-2,w*f,4),2,2);dc.DrawEllipse(accent,new Pen(Brushes.White,1),new Point(Math.Clamp(w*f,4,w-4),y),4,4);return;
     }

@@ -8,17 +8,17 @@ namespace YandexMiniPlayer;
 sealed record StudioFace(int Width,int Height,string Paper,string Ink,string Key,string Font,
  Rect Scene,Point Title,int TextWidth,Point Artwork,Point Controls,Rect Timeline,Point Clock,int KeyWidth,int Radius){
  public static StudioFace For(string theme)=>theme switch{
-  "Кофе"=>new(364,162,"#F1DFC1","#422C22","#DAB990","Georgia",new(0,0,144,145),new(151,37),202,new(8,99),new(150,88),new(148,123,201,16),new(152,141),42,12),
-  "Лаванда"=>new(296,224,"#F3EDF7","#483653","#E4D2F0","Georgia",new(0,0,296,103),new(66,108),221,new(5,104),new(73,174),new(6,151,282,16),new(9,201),43,18),
-  "Лес"=>new(350,178,"#173A35","#EDF5E3","#B8CAB4","Georgia",new(0,0,139,178),new(149,44),197,new(76,111),new(149,113),new(148,86,192,18),new(151,150),46,5),
-  "Minecraft"=>new(348,173,"#3A3731","#FFF2D4","#B8AE96","Consolas",new(0,0,348,76),new(71,78),265,new(6,78),new(151,134),new(71,117,265,14),new(8,144),55,0),
-  "Ночной океан"=>new(364,169,"#10283D","#E5F1FA","#9ABACD","Georgia",new(193,0,171,169),new(8,40),181,new(295,97),new(7,99),new(7,137,181,14),new(9,151),47,20),
-  "Персик"=>new(318,192,"#FFEBDA","#62332B","#FFD0AA","Segoe UI",new(174,32,144,109),new(9,42),162,new(12,86),new(76,145),new(79,103,91,15),new(81,123),45,16),
-  "Ретро"=>new(322,205,"#DDCEAA","#413B32","#B8ADA1","Consolas",new(0,31,322,94),new(67,123),246,new(4,128),new(136,177),new(67,164,241,10),new(5,183),53,3),
-  "Терминал"=>new(284,205,"#273431","#BFECC1","#B5C2AC","Consolas",new(0,28,284,112),new(18,46),193,new(212,45),new(15,160),new(17,92,180,18),new(19,116),58,3),
-  "Стекло"=>new(337,164,"#CBE4EF","#193D55","#EDF8FC","Segoe UI",new(0,28,126,128),new(128,42),202,new(30,64),new(128,101),new(128,138,193,15),new(4,140),47,22),
-  "Тёмная"=>new(339,162,"#191A20","#F6EFE9","#BCBAC6","Segoe UI",new(226,34,113,116),new(8,41),211,new(252,62),new(6,94),new(6,132,210,17),new(236,147),49,5),
-  _=>new(351,143,"#F9F7F0","#252831","#E6E4DC","Georgia",new(0,0,119,143),new(128,35),211,new(30,42),new(129,83),new(130,120,146,14),new(279,121),44,21)
+  "Кофе"=>new(364,162,"#F1DFC1","#422C22","#DAB990","Georgia",new(0,0,144,145),new(208,33),150,new(135,14),new(150,88),new(148,123,201,16),new(152,141),42,12),
+  "Лаванда"=>new(296,224,"#F3EDF7","#483653","#E4D2F0","Georgia",new(0,0,296,103),new(87,109),202,new(9,77),new(73,174),new(6,151,282,16),new(9,201),43,18),
+  "Лес"=>new(350,178,"#173A35","#EDF5E3","#B8CAB4","Georgia",new(0,0,139,178),new(149,44),197,new(35,64),new(149,113),new(148,86,192,18),new(151,150),46,5),
+  "Minecraft"=>new(348,173,"#3A3731","#FFF2D4","#B8AE96","Consolas",new(0,0,348,76),new(86,78),252,new(7,73),new(151,134),new(71,117,265,14),new(8,144),55,0),
+  "Ночной океан"=>new(364,169,"#10283D","#E5F1FA","#9ABACD","Georgia",new(193,0,171,169),new(8,38),178,new(199,34),new(7,99),new(7,137,181,14),new(9,151),47,20),
+  "Персик"=>new(318,192,"#FFEBDA","#62332B","#FFD0AA","Segoe UI",new(174,32,144,109),new(9,42),162,new(5,77),new(76,145),new(79,103,91,15),new(81,123),45,16),
+  "Ретро"=>new(322,205,"#DDCEAA","#413B32","#B8ADA1","Consolas",new(15,14,168,105),new(9,123),296,new(216,37),new(136,177),new(9,163,301,10),new(5,183),53,3),
+  "Терминал"=>new(284,205,"#273431","#BFECC1","#B5C2AC","Consolas",new(0,28,284,112),new(18,46),193,new(209,48),new(15,160),new(17,92,180,18),new(19,116),58,3),
+  "Стекло"=>new(337,164,"#CBE4EF","#193D55","#EDF8FC","Segoe UI",new(0,28,126,128),new(128,42),202,new(18,54),new(128,101),new(128,138,193,15),new(4,140),47,22),
+  "Тёмная"=>new(339,162,"#191A20","#F6EFE9","#BCBAC6","Segoe UI",new(115,74,215,43),new(115,33),215,new(7,18),new(7,128),new(178,128,150,15),new(258,147),49,5),
+  _=>new(351,143,"#F9F7F0","#252831","#E6E4DC","Georgia",new(0,0,119,143),new(128,35),211,new(19,34),new(129,83),new(130,120,146,14),new(279,121),44,21)
  };
 }
 
@@ -58,7 +58,7 @@ sealed class StudioArt:FrameworkElement{
     Rect(29,42,4,24,B("#705036"));Rect(20,29,22,19,B("#536A36"));Rect(24,21,14,13,B("#829B48"));break;
    case "Ночной океан":
     Rect(0,0,160,100,G("#111B34","#475367"),7);E(85,28,12,7.5,B("#FFDFAC"));Rect(0,53,160,47,G("#4F616E","#162E42"));
-    for(int i=0;i<85;i++){double y=rnd.Next(54,100),x=85+(rnd.NextDouble()-.5)*(y-49)*1.15;Line(x,y,x+rnd.Next(2,12),y,"#B8A58A",.7);}
+
     for(int i=0;i<34;i++){double x=rnd.Next(160),y=rnd.Next(1,42);E(x,y,.5,.5,B("#D8DDDF"));}break;
    case "Персик":
     E(91,81,52,9,B("#ECC1A2"));E(65,55,36,30,G("#FFCB89","#EA7867",50));E(95,53,36,32,G("#FFDA96","#E98B72",60));
@@ -78,7 +78,7 @@ sealed class StudioArt:FrameworkElement{
     foreach(var (x,y,r) in new[]{(37,29,26),(108,68,39),(137,18,17)}){E(x,y,r,r,G("#ECFEFD","#91B8D7",55));E(x-r*.29,y-r*.4,r*.19,r*.09,B("#E6F7FF"));}break;
    case "Тёмная":
     Rect(0,0,160,100,B("#24252C"),4);
-    for(int i=0;i<24;i++){double h=12+Math.Abs(Math.Sin(i*.42)*Math.Cos(i*.11))*64;Rect(i*7,95-h,4,h,G("#CBB3E8","#575563"));}break;
+    break;
    default:
     Rect(0,0,160,100,B("#ECE8DF"),18);
     for(int i=0;i<7;i++)d.DrawEllipse(null,new Pen(B("#BCB9B1"),1.1),new Point(77,51),62-i*5,46-i*3.6);
@@ -92,6 +92,15 @@ sealed class StudioArt:FrameworkElement{
 sealed class SceneMotion:FrameworkElement{
  readonly string theme;
  public double Phase;
+ public bool UsesAudio=>theme is "Тёмная" or "Minecraft";
+ readonly float[] history=new float[28];
+ public void Sample(float level){Array.Copy(history,1,history,0,history.Length-1);history[^1]=(float)Math.Sqrt(level);}
+ public void Silence(){Array.Clear(history);InvalidateVisual();}
+ static readonly Pen Water=new(new SolidColorBrush(Color.FromArgb(196,227,201,156)),.85);
+ static readonly Pen Stem=new(new SolidColorBrush(Color.FromRgb(104,113,83)),.8);
+ static readonly Brush Blossom=new SolidColorBrush(Color.FromRgb(181,143,205));
+ static readonly Brush Pixel=new SolidColorBrush(Color.FromRgb(157,204,83));
+ static readonly Brush Signal=new SolidColorBrush(Color.FromRgb(192,165,226));
  public SceneMotion(string theme){this.theme=theme;IsHitTestVisible=false;ClipToBounds=true;}
  static readonly Pen Steam=new(new SolidColorBrush(Color.FromArgb(156,255,242,213)),1.4);
  static readonly Brush Lamp=new SolidColorBrush(Color.FromRgb(244,229,147));
@@ -101,14 +110,34 @@ sealed class SceneMotion:FrameworkElement{
   if(theme=="Кофе"){
    for(int i=0;i<3;i++){
     var path=new StreamGeometry();double x=63+i*10,drift=3*Math.Sin(Phase+i);
-    using(var ctx=path.Open()){ctx.BeginFigure(new Point(x,33),false,false);ctx.BezierTo(new Point(x-7+drift,25),new Point(x+9+drift,18),new Point(x+drift,11-i*2),true,true);}d.DrawGeometry(null,Steam,path);
+    using(var ctx=path.Open()){ctx.BeginFigure(new Point(x,33),false,false);ctx.BezierTo(new Point(x-7+drift,25),new Point(x+9+drift,18),new Point(x+drift,10-i*2+2*Math.Sin(Phase*.7+i)),true,true);}d.DrawGeometry(null,Steam,path);
    }
   }else if(theme=="Ретро"){
    foreach(int x in new[]{43,117})for(int i=0;i<3;i++){
     double a=Phase+i*2*Math.PI/3;d.DrawLine(Spoke,new Point(x+3*Math.Cos(a),54+3*Math.Sin(a)),new Point(x+7*Math.Cos(a),54+7*Math.Sin(a)));
    }
   }else if(theme=="Лес"){
+   d.PushOpacity(.055);d.DrawEllipse(Brushes.White,null,new Point(68+18*Math.Sin(Phase*.19),42),60,3);d.Pop();
    for(int i=0;i<6;i++){double a=Phase*.5+i*7;d.PushOpacity(.3+.5*(.5+.5*Math.Sin(a)));d.DrawEllipse(Lamp,null,new Point(13+i*26+4*Math.Cos(a),49+i%3*14+3*Math.Sin(a)),1.3,.8);d.Pop();}
+  }else if(UsesAudio){
+   for(int i=0;i<history.Length;i++){
+    double h=history[i]*89;
+    if(theme=="Minecraft"){int cells=(int)Math.Ceiling(h/15);for(int k=0;k<cells;k++)d.DrawRectangle(Pixel,null,new Rect(i*5.7,84-k*15,4.3,11));}
+    else d.DrawRoundedRectangle(Signal,null,new Rect(i*5.7,96-h,3.9,Math.Max(2,h)),1,1);
+   }
+  }else if(theme=="Ночной океан"){
+   for(int i=0;i<60;i++){
+    double y=55+i*.7;double ripple=Math.Sin(i*.89+Phase*1.15);
+    double x=85+Math.Sin(i*2.399)*(y-52)*.34+ripple*2;
+    double width=2+(1+Math.Cos(i*.7-Phase))*(1+(y-53)*.09);
+    d.PushOpacity(.5+.24*ripple);d.DrawLine(Water,new Point(x-width,y),new Point(x+width,y));d.Pop();
+   }
+  }else if(theme=="Лаванда"){
+   for(int i=0;i<12;i++){double x=6+i*14,y=99-i%3*3,lean=2+2*Math.Sin(Phase*.9+i*.3);
+    d.DrawLine(Stem,new Point(x,y),new Point(x+lean,y-15));for(int j=0;j<4;j++)d.DrawEllipse(Blossom,null,new Point(x+lean+(j%2==0?-.6:.6),y-15+j*1.6),.9,1.5);
+   }
+  }else if(theme=="Персик"){
+   for(int i=0;i<3;i++){double a=Phase*.8+i*2;d.PushOpacity(.18+.13*Math.Sin(a));d.DrawEllipse(Brushes.White,null,new Point(100+i*5+Math.Cos(a)*1.4,41+i*3),1.7,1);d.Pop();}
   }else if(theme=="Терминал"){
    d.PushOpacity(.25+.75*(.5+.5*Math.Cos(Phase*3)));d.DrawRectangle(Lamp,null,new Rect(62,84,5,2));d.Pop();
   }
