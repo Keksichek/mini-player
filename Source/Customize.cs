@@ -45,7 +45,7 @@ public sealed partial class Player
  }
  void Customize(bool preview=false){
   if(customizeWindow!=null){customizeWindow.Activate();return;}
-  var original=appearance;bool saved=false;var w=new Window{Title="Кастомизация мини-плеера",Width=410,Height=640,ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterScreen,Topmost=true,Background=Brushes.WhiteSmoke};customizeWindow=w;
+  var original=appearance;bool saved=false;var w=new Window{Title="mini payer · Кастомизация",Width=410,Height=640,ResizeMode=ResizeMode.NoResize,WindowStartupLocation=WindowStartupLocation.CenterScreen,Topmost=true,Background=Brushes.WhiteSmoke};customizeWindow=w;
   var panel=new StackPanel{Margin=new Thickness(22),Background=Brushes.WhiteSmoke};var shell=new DockPanel{Background=Brushes.WhiteSmoke};var scroll=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};w.Content=shell;
   void Label(string text)=>panel.Children.Add(new TextBlock{Text=text,Margin=new Thickness(0,8,0,6)});
   Label("Тема");var theme=new ComboBox{ItemsSource=Themes,SelectedItem=appearance.Theme};panel.Children.Add(theme);

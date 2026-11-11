@@ -57,7 +57,7 @@ public sealed partial class Player : Window
  }
  public Player()
  {
-  Title="Мини-плеер · Яндекс Музыка";Width=380;Height=260;ResizeMode=ResizeMode.NoResize;WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;ShowInTaskbar=false;Topmost=true;
+  Title="mini payer";Width=380;Height=260;ResizeMode=ResizeMode.NoResize;WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;ShowInTaskbar=false;Topmost=true;
   Left=SystemParameters.WorkArea.Right-Width-24;Top=SystemParameters.WorkArea.Bottom-Height-24;
   var body=new Border{Background=new SolidColorBrush(Color.FromRgb(242,243,246)),BorderBrush=Brushes.White,BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(22),Padding=new Thickness(8)};Content=body;
   var style=(Style)System.Windows.Markup.XamlReader.Parse("<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Setter Property='Foreground' Value='#46505F'/><Setter Property='Background' Value='#F8F9FB'/><Setter Property='FontSize' Value='16'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'><Border Name='B' Background='{TemplateBinding Background}' CornerRadius='10' Padding='{TemplateBinding Padding}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='B' Property='Background' Value='#DFE8F5'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter TargetName='B' Property='Background' Value='#C7D7EE'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='0.35'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>");
@@ -68,7 +68,7 @@ public sealed partial class Player : Window
   var close=Button("×",()=>Hide());DockPanel.SetDock(close,Dock.Right);header.Children.Add(close);
   var expand=Button("⋯",()=>SetExpanded(!expanded));expand.ToolTip="Развернуть / свернуть настройки";DockPanel.SetDock(expand,Dock.Right);header.Children.Add(expand);
   var pin=Button("",()=>{Topmost=!Topmost;UpdatePin();Save();});pinButton=pin;UpdatePin();DockPanel.SetDock(pin,Dock.Right);header.Children.Add(pin);
-  var name=new TextBlock{Text="MUSIC / MINI",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);header.MouseLeftButtonDown+=(_,e)=>{if(e.OriginalSource==name||e.OriginalSource==header){DragMove();Save();}};stack.Children.Add(header);
+  var name=new TextBlock{Text="mini payer",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);header.MouseLeftButtonDown+=(_,e)=>{if(e.OriginalSource==name||e.OriginalSource==header){DragMove();Save();}};stack.Children.Add(header);
   var row=new DockPanel();var art=new Border{Width=52,Height=52,Background=new SolidColorBrush(Color.FromRgb(39,57,76)),Margin=new Thickness(0,0,10,0),Child=cover};DockPanel.SetDock(art,Dock.Left);row.Children.Add(art);
   var info=new StackPanel();info.Children.Add(title);info.Children.Add(artist);var controls=new StackPanel{Orientation=System.Windows.Controls.Orientation.Horizontal,Margin=new Thickness(0,6,0,0)};
   foreach(var b in new[]{prev,play,next}){b.Margin=new Thickness(0,0,6,0);b.Height=26;b.Width=36;controls.Children.Add(b);}
@@ -88,7 +88,7 @@ public sealed partial class Player : Window
   sources.SelectionChanged+=(_,_)=>{if(refreshing)return;session=sources.SelectedIndex>=0?sessions[sources.SelectedIndex]:null;SetMediaPlaying(false);preferred=session?.SourceAppUserModelId??"";track="";Save();};details.Children.Add(sources);details.Children.Add(auto);details.Children.Add(status);stack.Children.Add(details);
   Width=410;Foreground=Brushes.DimGray;SetExpanded(false);
   auto.Checked+=(_,_)=>{shownByUser=false;Save();};auto.Unchecked+=(_,_)=>{shownByUser=true;Save();};
-  tray=new(){Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppContext.BaseDirectory,"Player.ico")),Text="Яндекс Музыка · мини-плеер",Visible=true};
+  tray=new(){Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppContext.BaseDirectory,"Player.ico")),Text="mini payer",Visible=true};
   var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Показать плеер",null,(_,_)=>Dispatcher.Invoke(()=>{shownByUser=true;Show();Activate();}));menu.Items.Add("Кастомизация",null,(_,_)=>Dispatcher.Invoke(()=>Customize()));menu.Items.Add("Выход",null,(_,_)=>Dispatcher.Invoke(()=>{closing=true;Close();}));tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>{shownByUser=true;Show();Activate();};
   motionTimer.Tick+=(_,_)=>RenderMotion();
   IsVisibleChanged+=(_,_)=>SyncMotion();
