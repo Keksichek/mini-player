@@ -26,7 +26,7 @@ public sealed partial class Player
  void LoadAppearance(){try{var a=JsonSerializer.Deserialize<Appearance>(File.ReadAllText(AppearancePath));if(a!=null&&Themes.Contains(a.Theme)&&ValidColor(a.Accent)&&(a.BorderColor==null||ValidColor(a.BorderColor))&&(a.BackgroundColor==null||ValidColor(a.BackgroundColor)))appearance=a with{Scale=Math.Clamp(a.Scale,0.85,1.4),Alpha=Math.Clamp(a.Alpha,0.65,1),Round=Math.Clamp(a.Round,0,26),BorderWidth=Math.Clamp(a.BorderWidth,0,4),CoverSize=Math.Clamp(a.CoverSize,40,64)};}catch{}ApplyAppearance();}
  void ApplyAppearance(){
   if(Content is not Border body)return;
-  bool dark=appearance.Theme is "Тёмная" or "Minecraft" or "Ночной океан" or "Лес" or "Кофе" or "Терминал" or "Винил";bool pixel=appearance.Theme=="Minecraft";
+  bool dark=appearance.Theme is "Тёмная" or "Minecraft" or "Ночной океан" or "Лес" or "Терминал" or "Винил";bool pixel=appearance.Theme=="Minecraft";
   string bg=appearance.Theme switch{"Тёмная"=>"#19212D","Minecraft"=>"#383D34","Ретро"=>"#E0DAC5","Лаванда"=>"#EBE5F5","Ночной океан"=>"#102C46","Лес"=>"#213E32","Кофе"=>"#3E2C26","Персик"=>"#FFE4D7","Терминал"=>"#0B1911",_=>"#F2F3F6"};
   var foreground=(Brush)new BrushConverter().ConvertFromString(dark?"#F1F3ED":"#354052")!;
   var accent=(Brush)new BrushConverter().ConvertFromString(appearance.Accent)!;

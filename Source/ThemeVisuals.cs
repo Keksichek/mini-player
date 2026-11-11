@@ -7,7 +7,7 @@ namespace YandexMiniPlayer;
 public sealed partial class Player
 {
  static Brush BrushOf(string color)=>(Brush)new BrushConverter().ConvertFromString(color)!;
- static string ThemeBackground(string theme)=>theme switch{"Винил"=>"#26212B","Закат"=>"#FFF4E9","Карманный LCD"=>"#CFD8C5","Minecraft"=>"#353B31","Ретро"=>"#D7CBB0","Терминал"=>"#09150D","Стекло"=>"#EAF5FF","Ночной океан"=>"#102D49","Лес"=>"#173F32","Кофе"=>"#3D2920","Лаванда"=>"#E8DCF6","Персик"=>"#FFE3CE","Тёмная"=>"#18212D",_=>"#F2F3F6"};
+ static string ThemeBackground(string theme)=>theme switch{"Винил"=>"#26212B","Закат"=>"#FFF4E9","Карманный LCD"=>"#CFD8C5",_=>StudioFace.For(theme).Paper};
  static string ThemeAccent(string theme)=>theme switch{"Винил"=>"#FA8095","Закат"=>"#FF8655","Карманный LCD"=>"#FF795C","Minecraft"=>"#91DE47","Ретро"=>"#B44940","Терминал"=>"#52ED89","Стекло"=>"#6FADE8","Ночной океан"=>"#4CD8ED","Лес"=>"#B2D975","Кофе"=>"#ECB570","Лаванда"=>"#B38DE3","Персик"=>"#F59B75",_=>"#7FA6D9"};
  Brush Pattern(string theme,Brush background){
   var drawing=new DrawingGroup();using(var dc=drawing.Open()){

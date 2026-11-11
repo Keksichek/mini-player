@@ -27,6 +27,7 @@ public sealed partial class Player
   bool lcd=appearance.Theme=="Карманный LCD",sun=appearance.Theme=="Закат";
   var ink=BrushOf(Topmost?(lcd?"#DCF3B1":sun?"#923917":"#542437"):(lcd?"#C8CFC7":"#50464B"));
   facePin.Background=BrushOf(Topmost?(lcd?"#344635":sun?"#FFDBBF":"#F5C1CB"):(lcd?"#292F2B":sun?"#FFF5ED":"#DFD5D8"));
+  if(!lcd&&!sun&&appearance.Theme!="Винил"){var design=StudioFace.For(appearance.Theme);facePin.Background=Topmost?BrushOf(design.Key):BrushOf(design.Paper);ink=Topmost?BrushOf("#28262C"):BrushOf(design.Ink);}
   var content=new StackPanel{Orientation=Orientation.Horizontal};
   content.Children.Add(new Path{Data=Geometry.Parse("M 4,1 L 12,1 L 11,3 L 11,7 L 14,10 L 9,10 L 8,16 L 7,10 L 2,10 L 5,7 L 5,3 Z"),Width=12,Height=14,Stretch=Stretch.Uniform,Stroke=ink,StrokeThickness=1.4,Fill=Topmost?ink:Brushes.Transparent,RenderTransformOrigin=new Point(.5,.5),RenderTransform=new RotateTransform(Topmost?0:-42)});
   content.Children.Add(new TextBlock{Text=Topmost?"Закреплён":"Откреплён",FontFamily=new FontFamily(lcd?"Consolas":"Segoe UI"),FontSize=10,FontWeight=FontWeights.SemiBold,Foreground=ink,Margin=new Thickness(4,0,0,0),VerticalAlignment=VerticalAlignment.Center});
@@ -36,18 +37,20 @@ public sealed partial class Player
  }
  RotateTransform? platterRotation;
  FaceMeter? activeMeter;
+ SceneMotion? sceneMotion;
  bool mediaPlaying;
  readonly System.Diagnostics.Stopwatch motionTime=new();
  readonly System.Windows.Threading.DispatcherTimer motionTimer=new(){Interval=TimeSpan.FromMilliseconds(33)};
  void SyncMotion(){
-  bool run=mediaPlaying&&IsVisible&&!closing&&deviceFace!=null;
+  bool run=mediaPlaying&&IsVisible&&!closing&&(platterRotation!=null||sceneMotion!=null||activeMeter?.Animated==true);
   if(run){motionTime.Start();motionTimer.Start();}
   else{motionTime.Stop();motionTimer.Stop();}
  }
  void RenderMotion(){
   double seconds=motionTime.Elapsed.TotalSeconds;
+  if(sceneMotion!=null){sceneMotion.Phase=seconds;sceneMotion.InvalidateVisual();}
   if(platterRotation!=null)platterRotation.Angle=seconds*45%360;
-  else if(activeMeter!=null){activeMeter.Phase=seconds*2;activeMeter.InvalidateVisual();}
+  else if(activeMeter!=null&&activeMeter.Animated){activeMeter.Phase=seconds*2;activeMeter.InvalidateVisual();}
  }
  void SetMediaPlaying(bool playing){mediaPlaying=playing;SyncMotion();}
  void ApplyDeviceFace(Border body){
@@ -55,17 +58,18 @@ public sealed partial class Player
   if(deviceFace!=null){stack.Children.Remove(deviceFace);deviceFace=null;}
   bool vinyl=appearance.Theme=="Винил",sun=appearance.Theme=="Закат",lcd=appearance.Theme=="Карманный LCD";
   var classic=!(vinyl||sun||lcd);
-  stack.Children[0].Visibility=stack.Children[1].Visibility=classic?Visibility.Visible:Visibility.Collapsed;
-  facePin=null;platterRotation=null;activeMeter=null;
-  if(classic){SyncMotion();return;}
+  StudioFace? studio=classic?StudioFace.For(appearance.Theme):null;
+  stack.Children[0].Visibility=stack.Children[1].Visibility=Visibility.Collapsed;
+  facePin=null;platterRotation=null;activeMeter=null;sceneMotion=null;
+
   Brush B(string c)=>BrushOf(c);
   LinearGradientBrush Gradient(string first,string last,double angle=90)=>new((Color)ColorConverter.ConvertFromString(first),(Color)ColorConverter.ConvertFromString(last),angle);
-  var face=new Canvas{Width=vinyl?360:sun?320:230,Height=vinyl?110:sun?168:204,Background=Brushes.Transparent,HorizontalAlignment=HorizontalAlignment.Center};
+  var face=new Canvas{Width=studio?.Width??(vinyl?360:sun?320:230),Height=studio?.Height??(vinyl?110:sun?168:204),Background=Brushes.Transparent,HorizontalAlignment=HorizontalAlignment.Center};
   deviceFace=face;stack.Children.Insert(2,face);
-  body.Background=appearance.BackgroundColor!=null?B(appearance.BackgroundColor):vinyl?Gradient("#F2E7E7","#AD939A",70):sun?Gradient("#FFFAF4","#F6E1DA",55):Gradient("#F1EFDE","#BEBDAE");
-  body.CornerRadius=new CornerRadius(vinyl?appearance.Round*2.8:sun?appearance.Round:appearance.Round*.65);
-  body.BorderBrush=B(appearance.BorderColor??(vinyl?"#D1BDC2":sun?"#FFFDF9":"#AAA99C"));
-  var ink=B(vinyl?"#312732":sun?"#382A26":"#DBE5D7");
+  body.Background=appearance.BackgroundColor!=null?B(appearance.BackgroundColor):studio!=null?(appearance.Theme=="Стекло"?Gradient("#E1F1FBFF","#CACDE3EF",45):B(studio.Paper)):vinyl?Gradient("#F2E7E7","#AD939A",70):sun?Gradient("#FFFAF4","#F6E1DA",55):Gradient("#F1EFDE","#BEBDAE");
+  body.CornerRadius=new CornerRadius(studio!=null?appearance.Round:vinyl?appearance.Round*2.8:sun?appearance.Round:appearance.Round*.65);
+  body.BorderBrush=B(appearance.BorderColor??studio?.Key??(vinyl?"#D1BDC2":sun?"#FFFDF9":"#AAA99C"));
+  var ink=B(studio?.Ink??(vinyl?"#312732":sun?"#382A26":"#DBE5D7"));
   var accent=B(appearance.Accent);
   Canvas drawingLayer=face;
   void Put(FrameworkElement e,double x,double y,double w,double h){
@@ -81,7 +85,7 @@ public sealed partial class Player
    face.Children.Add(new Path{Data=Geometry.Parse(data),Fill=fill,Stroke=stroke,StrokeThickness=thickness,IsHitTestVisible=false});
   }
   void Caption(TextBlock src,double x,double y,double w,double size,Brush color,bool bold=false){
-   var t=new TextBlock{Foreground=color,FontSize=size,FontWeight=bold?FontWeights.Bold:FontWeights.Normal,FontFamily=new FontFamily(lcd?"Consolas":"Segoe UI"),TextTrimming=TextTrimming.CharacterEllipsis};
+   var t=new TextBlock{Foreground=color,FontSize=size,FontWeight=bold?FontWeights.Bold:FontWeights.Normal,FontFamily=new FontFamily(studio?.Font??(lcd?"Consolas":"Segoe UI")),TextTrimming=TextTrimming.CharacterEllipsis};
    t.SetBinding(TextBlock.TextProperty,new Binding("Text"){Source=src});
    Put(t,x,y,w,size*1.6);
   }
@@ -89,7 +93,7 @@ public sealed partial class Player
    var img=new Image{Stretch=Stretch.UniformToFill,Clip=new RectangleGeometry(new Rect(0,0,size,size),radius,radius)};
    img.SetBinding(Image.SourceProperty,new Binding("Source"){Source=cover});Put(img,x,y,size,size);
   }
-  var buttonSkin=(ControlTemplate)XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Background='{TemplateBinding Background}' CornerRadius='"+(lcd?"4":"24")+"' BorderBrush='#70FFFFFF' BorderThickness='1'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter Property='Opacity' Value='.78'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter Property='Opacity' Value='.60'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.46'/></Trigger></ControlTemplate.Triggers></ControlTemplate>");
+  var buttonSkin=(ControlTemplate)XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Background='{TemplateBinding Background}' CornerRadius='"+(studio?.Radius.ToString()??(lcd?"4":"24"))+"' BorderBrush='#70FFFFFF' BorderThickness='1'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter Property='Opacity' Value='.78'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter Property='Opacity' Value='.60'/></Trigger><Trigger Property='IsEnabled' Value='False'><Setter Property='Opacity' Value='.46'/></Trigger></ControlTemplate.Triggers></ControlTemplate>");
   Button Key(double x,double y,double w,double h,string label,string hint,Brush fill,Action? action=null){
    var b=new Button{Content=label,Foreground=B("#302B2E"),Background=fill,Template=buttonSkin,ToolTip=hint,Cursor=Cursors.Hand};
    System.Windows.Automation.AutomationProperties.SetName(b,hint);
@@ -114,7 +118,28 @@ public sealed partial class Player
   }
   Brush metal=Gradient("#F0E9E6","#A79DA1");
   double scale=appearance.CoverSize/52;
-  if(vinyl){
+  if(studio!=null){
+   var scene=studio.Scene;
+   Put(new StudioArt(appearance.Theme),scene.X,scene.Y,scene.Width,scene.Height);
+   if(appearance.Theme is "Кофе" or "Лес" or "Терминал" or "Ретро"){
+    sceneMotion=new SceneMotion(appearance.Theme);Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
+   }
+   var pos=studio.Artwork;double artSize=appearance.CoverSize*.85;
+   if(appearance.Theme=="Кофе"||appearance.Theme=="Лаванда"||appearance.Theme=="Ретро"||appearance.Theme=="Терминал"||appearance.Theme=="Персик"||appearance.Theme=="Minecraft"){
+    Box(pos.X,pos.Y,artSize,artSize,B(studio.Key),studio.Radius/2);
+    for(int i=0;i<5;i++)Box(pos.X+artSize*(.17+i*.14),pos.Y+artSize*(.5-.06*(i%3)),artSize*.08,artSize*(.15+.12*(i%3)),B(studio.Paper),1);
+   }
+   Art(pos.X,pos.Y,appearance.CoverSize*.85,studio.Radius/2);
+   int titleSize=appearance.Theme=="Светлая"||appearance.Theme=="Тёмная"?18:15;
+   Caption(title,studio.Title.X,studio.Title.Y,studio.TextWidth,titleSize,ink,true);
+   if(appearance.ShowArtist)Caption(artist,studio.Title.X,studio.Title.Y+titleSize+5,studio.TextWidth,11,ink);
+   if(appearance.ShowTime)Caption(timeLabel,studio.Clock.X,studio.Clock.Y,90,10,ink);
+   var keys=studio.Controls;int width=studio.KeyWidth;
+   Transport(prev,keys.X,keys.Y,width,27,B(studio.Key),"Предыдущий трек");
+   bool roundPlay=appearance.Theme is "Персик" or "Лаванда" or "Тёмная";
+   Transport(play,keys.X+width+4+(roundPlay?(width-36)/2:0),keys.Y-(roundPlay?4:0),roundPlay?36:width,roundPlay?36:27,accent,"Воспроизведение / пауза");
+   Transport(next,keys.X+2*(width+4),keys.Y,width,27,B(studio.Key),"Следующий трек");
+  }else if(vinyl){
    double d=Math.Min(105,96*scale),x=54-d/2,y=55-d/2;
    Oval(x-2,y-2,d+4,metal);
    platterRotation=new RotateTransform(0,54,55);
@@ -150,11 +175,12 @@ public sealed partial class Player
    for(int row=0;row<3;row++)for(int i=0;i<44;i++)Oval(7+i*5+(row%2)*2,124+row*4,2,B("#555950"));
    Transport(prev,4,146,53,52,metal,"Предыдущий трек");Transport(play,60,146,109,52,accent,"Воспроизведение / пауза");Transport(next,172,146,54,52,metal,"Следующий трек");
   }
-  var meter=new FaceMeter(vinyl,lcd,accent);
+  var meter=new FaceMeter(vinyl,lcd,accent,studio==null?"":appearance.Theme);
   activeMeter=meter;RenderMotion();SyncMotion();
   meter.SetBinding(FaceMeter.PositionProperty,new Binding("Value"){Source=seek});
   meter.SetBinding(FaceMeter.DurationProperty,new Binding("Maximum"){Source=seek});
-  Put(meter,vinyl?301:sun?122:12,vinyl?12:sun?85:58,vinyl?52:sun?181:204,vinyl?88:sun?22:34);
+  if(studio!=null){var bounds=studio.Timeline;Put(meter,bounds.X,bounds.Y,bounds.Width,bounds.Height);}
+  else Put(meter,vinyl?301:sun?122:12,vinyl?12:sun?85:58,vinyl?52:sun?181:204,vinyl?88:sun?22:34);
   meter.ToolTip="Перемотка";meter.Cursor=Cursors.Hand;meter.Focusable=true;
   void Locate(MouseEventArgs e){var p=e.GetPosition(meter);double f=vinyl?(Math.Atan2(p.Y-meter.Height/2,Math.Max(0,p.X))*180/Math.PI+78)/156:p.X/meter.Width;seek.Value=Math.Clamp(f,0,1)*seek.Maximum;}
   meter.MouseLeftButtonDown+=(_,e)=>{if(!seek.IsEnabled)return;meter.Focus();seekTrack=track;seeking=true;meter.CaptureMouse();Locate(e);e.Handled=true;};
@@ -162,8 +188,8 @@ public sealed partial class Player
   meter.MouseLeftButtonUp+=async(_,e)=>{if(!meter.IsMouseCaptured)return;Locate(e);meter.ReleaseMouseCapture();e.Handled=true;await Seek();};
   meter.LostMouseCapture+=(_,_)=>seeking=false;
   meter.KeyDown+=async(_,e)=>{if(!seek.IsEnabled||e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right))return;seekTrack=track;seek.Value+=e.Key==System.Windows.Input.Key.Left?-5:5;e.Handled=true;await Seek();};
-  facePin=Key(vinyl?216:sun?211:137,vinyl?86:sun?4:92,sun?70:80,lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
-  var more=Key(vinyl?252:sun?286:198,vinyl?56:sun?4:10,26,22,"⋯","Меню плеера",vinyl?metal:B("#EAE3DB"));
+  facePin=Key(studio!=null?studio.Width-112:vinyl?216:sun?211:137,studio!=null?2:vinyl?86:sun?4:92,sun?70:80,lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
+  var more=Key(studio!=null?studio.Width-28:vinyl?252:sun?286:198,studio!=null?2:vinyl?56:sun?4:10,26,22,"⋯","Меню плеера",vinyl?metal:B("#EAE3DB"));
   face.ContextMenu=AttachPlayerMenu(more);
 
  }
@@ -172,7 +198,9 @@ public sealed partial class Player
   public static readonly DependencyProperty DurationProperty=DependencyProperty.Register("Duration",typeof(double),typeof(FaceMeter),new FrameworkPropertyMetadata(1d,FrameworkPropertyMetadataOptions.AffectsRender));
   public double Phase {get;set;}
   readonly bool arc,lcd;readonly Brush accent,idle;
-  public FaceMeter(bool arc,bool lcd,Brush accent){this.arc=arc;this.lcd=lcd;this.accent=accent;idle=BrushOf(lcd?"#79827A":"#D6BEB4");}
+  readonly string style;
+  public bool Animated=>!arc && style is ("" or "Лаванда" or "Лес" or "Ночной океан" or "Тёмная");
+  public FaceMeter(bool arc,bool lcd,Brush accent,string style){this.style=style;this.arc=arc;this.lcd=lcd;this.accent=accent;idle=BrushOf(lcd?"#79827A":"#D6BEB4");}
   protected override void OnRender(DrawingContext dc){
    double w=ActualWidth,h=ActualHeight,f=Math.Clamp((double)GetValue(PositionProperty)/Math.Max(1,(double)GetValue(DurationProperty)),0,1);
    dc.DrawRectangle(Brushes.Transparent,null,new Rect(0,0,w,h));
@@ -182,6 +210,15 @@ public sealed partial class Player
     dc.DrawEllipse(BrushOf("#E5DBDC"),new Pen(BrushOf("#776970"),1),At(f),4,4);
    }else{
 
+    if(style is "Терминал" or "Minecraft" or "Ретро"){
+     double step=style=="Ретро"?5:9;
+     for(double x=0;x<w;x+=step){double height=style=="Ретро"?(x%20==0?9:4):7;dc.DrawRectangle(x<=w*f?accent:idle,null,new Rect(x,(h-height)/2,Math.Min(w-x,step-2),height));}
+     return;
+    }
+    if(style is "Светлая" or "Кофе" or "Персик" or "Стекло"){
+     double y=h/2;dc.DrawRoundedRectangle(idle,null,new Rect(0,y-1,w,2),1,1);
+     dc.DrawRoundedRectangle(accent,null,new Rect(0,y-2,w*f,4),2,2);dc.DrawEllipse(accent,new Pen(Brushes.White,1),new Point(Math.Clamp(w*f,4,w-4),y),4,4);return;
+    }
     for(int x=1;x<w;x+=3){
      double envelope=.2+.8*Math.Pow(Math.Sin(x*.031+.4-Phase*.6),2);
      double bar=2+(h-3)*envelope*(.35+.65*Math.Pow(Math.Sin(x*.10-Phase),2));
