@@ -81,8 +81,7 @@ sealed class StudioArt:FrameworkElement{
     break;
    default:
     Rect(0,0,160,100,B("#ECE8DF"),18);
-    for(int i=0;i<7;i++)d.DrawEllipse(null,new Pen(B("#BCB9B1"),1.1),new Point(77,51),62-i*5,46-i*3.6);
-    E(77,51,23,17,B("#E3A69C"));break;
+break;
   }
   d.Pop();
  }
@@ -92,10 +91,17 @@ sealed class StudioArt:FrameworkElement{
 sealed class SceneMotion:FrameworkElement{
  readonly string theme;
  public double Phase;
- public bool UsesAudio=>theme is "Тёмная" or "Minecraft";
+ public bool UsesAudio=>theme is "Светлая" or "Тёмная" or "Minecraft";
+ public double CoverRadius {get;set;}
+ double pulse;
+ static readonly Pen Ring=new(new SolidColorBrush(Color.FromRgb(173,169,158)),1);
  readonly float[] history=new float[28];
- public void Sample(float level){Array.Copy(history,1,history,0,history.Length-1);history[^1]=(float)Math.Sqrt(level);}
- public void Silence(){Array.Clear(history);InvalidateVisual();}
+ public void Sample(float level,double sensitivity){
+  float strength=(float)Math.Min(1,Math.Sqrt(level)*sensitivity);
+  if(theme=="Светлая"){pulse+=(strength-pulse)*(strength>pulse?.85:.24);return;}
+  Array.Copy(history,1,history,0,history.Length-1);history[^1]=strength;
+ }
+ public void Silence(){pulse=0;Array.Clear(history);InvalidateVisual();}
  static readonly Pen Water=new(new SolidColorBrush(Color.FromArgb(196,227,201,156)),.85);
  static readonly Pen Stem=new(new SolidColorBrush(Color.FromRgb(104,113,83)),.8);
  static readonly Brush Blossom=new SolidColorBrush(Color.FromRgb(181,143,205));
@@ -106,6 +112,16 @@ sealed class SceneMotion:FrameworkElement{
  static readonly Brush Lamp=new SolidColorBrush(Color.FromRgb(244,229,147));
  static readonly Pen Spoke=new(new SolidColorBrush(Color.FromRgb(220,201,169)),1.15);
  protected override void OnRender(DrawingContext d){
+  if(theme=="Светлая"){
+   var center=new Point(ActualWidth/2,ActualHeight/2);
+   double outer=Math.Min(center.X,center.Y)-9;
+   for(int i=1;i<=5;i++){
+    double fraction=i/5d;
+    double radius=CoverRadius+1+(outer-CoverRadius-1)*fraction+pulse*(2+5*fraction);
+    d.DrawEllipse(null,Ring,center,radius,radius);
+   }
+   return;
+  }
   d.PushTransform(new ScaleTransform(ActualWidth/160,ActualHeight/100));
   if(theme=="Кофе"){
    for(int i=0;i<3;i++){

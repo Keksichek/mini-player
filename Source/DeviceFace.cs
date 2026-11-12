@@ -68,7 +68,7 @@ public sealed partial class Player
   if(sceneMotion!=null){
    if(sceneMotion.UsesAudio&&mediaPlaying&&IsVisible&&seconds-lastSample>=.065){
     var source=session?.SourceAppUserModelId??"";
-    sceneMotion.Sample(peakReader.Read(audioSource==source?audioTarget:"",source));lastSample=seconds;
+    sceneMotion.Sample(peakReader.Read(audioSource==source?audioTarget:"",source),appearance.Sensitivity);lastSample=seconds;
    }
    sceneMotion.Phase=seconds;sceneMotion.InvalidateVisual();}
   if(platterRotation!=null)platterRotation.Angle=seconds*45%360;
@@ -145,7 +145,7 @@ public sealed partial class Player
    var scene=studio.Scene;
    Put(new StudioArt(appearance.Theme),scene.X,scene.Y,scene.Width,scene.Height);
    string theme=appearance.Theme;
-   if(theme is "Кофе" or "Лес" or "Терминал" or "Ретро" or "Лаванда" or "Персик" or "Ночной океан" or "Тёмная" or "Minecraft"){
+   if(theme is "Светлая" or "Кофе" or "Лес" or "Терминал" or "Ретро" or "Лаванда" or "Персик" or "Ночной океан" or "Тёмная" or "Minecraft"){
     sceneMotion=new SceneMotion(theme);
     if(theme=="Minecraft"){Box(88,25,116,35,B("#BE303626"),1);Put(sceneMotion,91,26,110,32);}
     else Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
@@ -166,6 +166,10 @@ public sealed partial class Player
    };
    double artSize=Math.Min(limit,appearance.CoverSize*factor);
    var frame=new Canvas{Width=artSize+2*edge,Height=artSize+2*edge,RenderTransformOrigin=new Point(.5,.5)};
+   if(theme=="Светлая"){
+    pos=new Point(scene.X+(scene.Width-frame.Width)/2,scene.Y+(scene.Height-frame.Height)/2);
+    radius=artSize/2;sceneMotion!.CoverRadius=frame.Width/2;
+   }
    if(theme is "Кофе" or "Лес" or "Ретро")frame.RenderTransform=new RotateTransform(theme=="Ретро"?3:-4);
    Put(frame,pos.X,pos.Y,frame.Width,frame.Height);drawingLayer=frame;
    Box(0,0,frame.Width,frame.Height,B(mat),radius+edge);Box(edge,edge,artSize,artSize,B(studio.Key),radius);

@@ -9,7 +9,7 @@ using System.Text.Json;
 namespace YandexMiniPlayer;
 public sealed partial class Player
 {
- record Appearance(string Theme="Светлая",string Accent="#7FA6D9",double Scale=1,double Alpha=1,string? BorderColor=null,double Round=20,double BorderWidth=1,double CoverSize=52,bool ShowArtist=true,bool ShowTime=true,string? BackgroundColor=null);
+ record Appearance(string Theme="Светлая",string Accent="#7FA6D9",double Scale=1,double Alpha=1,string? BorderColor=null,double Round=20,double BorderWidth=1,double CoverSize=52,bool ShowArtist=true,bool ShowTime=true,string? BackgroundColor=null,double Sensitivity=1);
  Appearance appearance=new();Window? customizeWindow;
  void UpdatePin(){
   UpdateFacePin();
@@ -23,7 +23,7 @@ public sealed partial class Player
  static readonly string[] Themes={"Светлая","Тёмная","Minecraft","Ретро","Лаванда","Ночной океан","Лес","Кофе","Персик","Терминал","Стекло","Винил","Закат","Карманный LCD"};
  static readonly string[] Accents={"#7FA6D9","#8BE878","#55DCCB","#F0AA60","#D99BEF","#EE829A"};
  static bool ValidColor(string value){try{return value.Length==7&&value[0]=='#'&&ColorConverter.ConvertFromString(value) is Color;}catch{return false;}}
- void LoadAppearance(){try{var a=JsonSerializer.Deserialize<Appearance>(File.ReadAllText(AppearancePath));if(a!=null&&Themes.Contains(a.Theme)&&ValidColor(a.Accent)&&(a.BorderColor==null||ValidColor(a.BorderColor))&&(a.BackgroundColor==null||ValidColor(a.BackgroundColor)))appearance=a with{Scale=Math.Clamp(a.Scale,0.85,1.4),Alpha=Math.Clamp(a.Alpha,0.65,1),Round=Math.Clamp(a.Round,0,26),BorderWidth=Math.Clamp(a.BorderWidth,0,4),CoverSize=Math.Clamp(a.CoverSize,40,64)};}catch{}ApplyAppearance();}
+ void LoadAppearance(){try{var a=JsonSerializer.Deserialize<Appearance>(File.ReadAllText(AppearancePath));if(a!=null&&Themes.Contains(a.Theme)&&ValidColor(a.Accent)&&(a.BorderColor==null||ValidColor(a.BorderColor))&&(a.BackgroundColor==null||ValidColor(a.BackgroundColor)))appearance=a with{Sensitivity=Math.Clamp(a.Sensitivity,0,3),Scale=Math.Clamp(a.Scale,0.85,1.4),Alpha=Math.Clamp(a.Alpha,0.65,1),Round=Math.Clamp(a.Round,0,26),BorderWidth=Math.Clamp(a.BorderWidth,0,4),CoverSize=Math.Clamp(a.CoverSize,40,64)};}catch{}ApplyAppearance();}
  void ApplyAppearance(){
   if(Content is not Border body)return;
   bool dark=appearance.Theme is "Тёмная" or "Minecraft" or "Ночной океан" or "Лес" or "Терминал" or "Винил";bool pixel=appearance.Theme=="Minecraft";
@@ -90,18 +90,21 @@ public sealed partial class Player
   brightness.ValueChanged+=(_,_)=>{if(!syncing){wheel.Value=brightness.Value;wheel.Publish();}};
   wheel.Changed+=hex=>{appearance=role switch{0=>appearance with{Accent=hex},1=>appearance with{BorderColor=hex},_=>appearance with{BackgroundColor=hex}};code.Text=hex;for(int i=0;i<3;i++)samples[i].Background=BrushOf(ColorAt(i));ApplyAppearance();};
   var form=Card(geometry,"Размер и форма");var updates=new System.Collections.Generic.List<Action>();
-  void Setting(string name,double min,double max,double step,Func<double> read,Action<double> write,bool percent=false){
-   var line=new DockPanel{Margin=new Thickness(0,8,0,0)};form.Children.Add(line);var val=Text("",12,purple,true);DockPanel.SetDock(val,Dock.Right);line.Children.Add(val);line.Children.Add(Text(name,13,ink));
-   var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true};form.Children.Add(slider);
+  void Setting(string name,double min,double max,double step,Func<double> read,Action<double> write,bool percent=false,StackPanel? section=null,bool rebuild=true){
+   var line=new DockPanel{Margin=new Thickness(0,8,0,0)};(section??form).Children.Add(line);var val=Text("",12,purple,true);DockPanel.SetDock(val,Dock.Right);line.Children.Add(val);line.Children.Add(Text(name,13,ink));
+   var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true};(section??form).Children.Add(slider);
    System.Windows.Automation.AutomationProperties.SetName(slider,name);
    void Update(){val.Text=percent?$"{read()*100:0}%":$"{read():0} px";}
-   updates.Add(()=>{slider.Value=read();Update();});slider.ValueChanged+=(_,_)=>{if(syncing)return;write(slider.Value);Update();ApplyAppearance();};
+   updates.Add(()=>{slider.Value=read();Update();});slider.ValueChanged+=(_,_)=>{if(syncing)return;write(slider.Value);Update();if(rebuild)ApplyAppearance();};
   }
   Setting("Масштаб",.85,1.4,.05,()=>appearance.Scale,v=>appearance=appearance with{Scale=v},true);
   Setting("Непрозрачность",.65,1,.01,()=>appearance.Alpha,v=>appearance=appearance with{Alpha=v},true);
   Setting("Скругление углов",0,26,1,()=>appearance.Round,v=>appearance=appearance with{Round=v});
   Setting("Толщина рамки",0,4,1,()=>appearance.BorderWidth,v=>appearance=appearance with{BorderWidth=v});
   Setting("Размер обложки",40,64,1,()=>appearance.CoverSize,v=>appearance=appearance with{CoverSize=v});
+  var sound=Card(geometry,"Реакция на музыку");
+  Setting("Чувствительность эквалайзера",0,3,.05,()=>appearance.Sensitivity,v=>appearance=appearance with{Sensitivity=v},true,sound,false);
+  sound.Children.Add(Text("Кольца светлой темы и индикаторы в тёмной теме и Minecraft. При 0% реакция выключена.",12,muted));
   var info=Card(geometry,"Информация о треке");
   var artistCheck=new CheckBox{Content="Исполнитель",Margin=new Thickness(0,8,0,0)};var timeCheck=new CheckBox{Content="Время трека",Margin=new Thickness(0,6,0,0)};
   info.Children.Add(artistCheck);info.Children.Add(timeCheck);
