@@ -86,6 +86,7 @@ public sealed partial class Player : Window
   var pin=Button("",TogglePin);pinButton=pin;UpdatePin();DockPanel.SetDock(pin,Dock.Right);header.Children.Add(pin);
   var name=new TextBlock{Text="mini payer",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);stack.Children.Add(header);
   var row=new DockPanel();var art=new Border{Width=52,Height=52,Background=new SolidColorBrush(Color.FromRgb(39,57,76)),Margin=new Thickness(0,0,10,0),Child=cover};DockPanel.SetDock(art,Dock.Left);row.Children.Add(art);
+  EnableFullTitle(title);
   var info=new StackPanel();info.Children.Add(title);info.Children.Add(artist);var controls=new StackPanel{Orientation=System.Windows.Controls.Orientation.Horizontal,Margin=new Thickness(0,6,0,0)};
   foreach(var b in new[]{prev,play,next}){b.Margin=new Thickness(0,0,6,0);b.Height=26;b.Width=36;controls.Children.Add(b);}
   foreach(var text in new[]{"♡","⊘","☷"}){var unavailable=Button(text,()=>{});unavailable.Width=27;unavailable.MinWidth=27;unavailable.Margin=new Thickness(0,0,3,0);unavailable.IsEnabled=false;unavailable.ToolTip=text=="☷"?"Очередь Яндекс Музыки недоступна через системный медиапульт":"Лайки и дизлайки требуют прямого подключения к Яндекс Музыке";ToolTipService.SetShowOnDisabled(unavailable,true);details.Children.Add(unavailable); unavailable.Visibility=Visibility.Collapsed;}

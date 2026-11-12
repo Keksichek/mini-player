@@ -21,6 +21,21 @@ public sealed partial class Player
   button.Click+=(_,_)=>{menu.PlacementTarget=button;menu.Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom;menu.IsOpen=true;};
   return menu;
  }
+ static bool TitleIsClipped(TextBlock label){
+  if(string.IsNullOrEmpty(label.Text)||label.ActualWidth<=0)return false;
+  var text=new FormattedText(label.Text,label.Language.GetSpecificCulture(),label.FlowDirection,
+   new Typeface(label.FontFamily,label.FontStyle,label.FontWeight,label.FontStretch),label.FontSize,
+   label.Foreground,VisualTreeHelper.GetDpi(label).PixelsPerDip);
+  return text.WidthIncludingTrailingWhitespace>label.ActualWidth;
+ }
+ static void EnableFullTitle(TextBlock label){
+  var fullText=new TextBlock{MaxWidth=Math.Min(480,SystemParameters.WorkArea.Width*.8),TextWrapping=TextWrapping.Wrap};
+  fullText.SetBinding(TextBlock.TextProperty,new Binding(nameof(TextBlock.Text)){Source=label});
+  label.ToolTip=new ToolTip{Content=fullText};
+  ToolTipService.SetInitialShowDelay(label,350);
+  ToolTipService.SetShowDuration(label,60000);
+  label.ToolTipOpening+=(_,e)=>{if(!TitleIsClipped(label))e.Handled=true;};
+ }
  void TogglePin(){Topmost=!Topmost;UpdatePin();Save();}
  void UpdateFacePin(){
   if(facePin==null)return;
@@ -94,6 +109,7 @@ public sealed partial class Player
   void Caption(TextBlock src,double x,double y,double w,double size,Brush color,bool bold=false){
    var t=new TextBlock{Foreground=color,FontSize=size,FontWeight=bold?FontWeights.Bold:FontWeights.Normal,FontFamily=new FontFamily(studio?.Font??(lcd?"Consolas":"Segoe UI")),TextTrimming=TextTrimming.CharacterEllipsis};
    t.SetBinding(TextBlock.TextProperty,new Binding("Text"){Source=src});
+   if(src==title)EnableFullTitle(t);
    Put(t,x,y,w,size*1.6);
   }
   void Art(double x,double y,double size,double radius){
