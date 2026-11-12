@@ -96,22 +96,36 @@ sealed class SceneMotion:FrameworkElement{
  double pulse;
  static readonly Pen Ring=new(new SolidColorBrush(Color.FromRgb(173,169,158)),1);
  readonly float[] history=new float[28];
- int samplesInColumn;
- const int DarkSamplesPerColumn=3;
+ const double DarkColumnSeconds=.20;
+ readonly float[] darkPeaks=new float[29];
+ readonly double[] darkHeights=new double[29];
+ double previousFrame=-1, columnFraction;
+
+ public void AdvanceDarkTrail(double seconds){
+  if(previousFrame<0){previousFrame=seconds;return;}
+  double elapsed=Math.Max(0,seconds-previousFrame);
+  previousFrame=seconds;
+  // Carry the fractional distance through each shift so a column stays in motion.
+  double distance=columnFraction+elapsed/DarkColumnSeconds;
+  int steps=(int)Math.Min(Math.Floor(distance),darkPeaks.Length);
+  columnFraction=distance-Math.Floor(distance);
+  if(steps>0){
+   int keep=darkPeaks.Length-steps;
+   Array.Copy(darkPeaks,steps,darkPeaks,0,keep);Array.Clear(darkPeaks,keep,steps);
+   Array.Copy(darkHeights,steps,darkHeights,0,keep);Array.Clear(darkHeights,keep,steps);
+  }
+  double blend=1-Math.Exp(-elapsed/.055);
+  for(int i=0;i<darkHeights.Length;i++)darkHeights[i]+=(darkPeaks[i]-darkHeights[i])*blend;
+ }
  public void Sample(float level,double sensitivity){
   float strength=(float)Math.Min(1,Math.Sqrt(level)*sensitivity);
   if(theme=="Светлая"){pulse+=(strength-pulse)*(strength>pulse?.85:.24);return;}
   if(theme=="Тёмная"){
-   if(samplesInColumn>0){
-    history[^1]=Math.Max(history[^1],strength);
-    samplesInColumn=(samplesInColumn+1)%DarkSamplesPerColumn;
-    return;
-   }
-   samplesInColumn=1;
+   darkPeaks[^1]=Math.Max(darkPeaks[^1],strength);return;
   }
   Array.Copy(history,1,history,0,history.Length-1);history[^1]=strength;
  }
- public void Silence(){samplesInColumn=0;pulse=0;Array.Clear(history);InvalidateVisual();}
+ public void Silence(){previousFrame=-1;columnFraction=0;Array.Clear(darkPeaks);Array.Clear(darkHeights);pulse=0;Array.Clear(history);InvalidateVisual();}
  static readonly Pen Water=new(new SolidColorBrush(Color.FromArgb(196,227,201,156)),.85);
  static readonly Pen Stem=new(new SolidColorBrush(Color.FromRgb(104,113,83)),.8);
  static readonly Brush Blossom=new SolidColorBrush(Color.FromRgb(181,143,205));
@@ -145,11 +159,16 @@ sealed class SceneMotion:FrameworkElement{
   }else if(theme=="Лес"){
    d.PushOpacity(.055);d.DrawEllipse(Brushes.White,null,new Point(68+18*Math.Sin(Phase*.19),42),60,3);d.Pop();
    for(int i=0;i<6;i++){double a=Phase*.5+i*7;d.PushOpacity(.3+.5*(.5+.5*Math.Sin(a)));d.DrawEllipse(Lamp,null,new Point(13+i*26+4*Math.Cos(a),49+i%3*14+3*Math.Sin(a)),1.3,.8);d.Pop();}
-  }else if(UsesAudio){
+  }else if(theme=="Тёмная"){
+   const double pitch=160d/28;
+   for(int i=0;i<darkHeights.Length;i++){
+    double h=Math.Max(2,darkHeights[i]*89);
+    d.DrawRoundedRectangle(Signal,null,new Rect((i-columnFraction)*pitch,98-h,3.9,h),1,1);
+   }
+  }else if(theme=="Minecraft"){
    for(int i=0;i<history.Length;i++){
-    double h=history[i]*89;
-    if(theme=="Minecraft"){int cells=(int)Math.Ceiling(h/15);for(int k=0;k<cells;k++)d.DrawRectangle(Pixel,null,new Rect(i*5.7,84-k*15,4.3,11));}
-    else d.DrawRoundedRectangle(Signal,null,new Rect(i*5.7,96-h,3.9,Math.Max(2,h)),1,1);
+    int cells=(int)Math.Ceiling(history[i]*89/15);
+    for(int k=0;k<cells;k++)d.DrawRectangle(Pixel,null,new Rect(i*5.7,84-k*15,4.3,11));
    }
   }else if(theme=="Ночной океан"){
    for(int i=0;i<60;i++){

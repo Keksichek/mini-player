@@ -59,6 +59,7 @@ public sealed partial class Player
  readonly System.Diagnostics.Stopwatch motionTime=new();
  readonly System.Windows.Threading.DispatcherTimer motionTimer=new(){Interval=TimeSpan.FromMilliseconds(33)};
  void SyncMotion(){
+  motionTimer.Interval=TimeSpan.FromMilliseconds(appearance.Theme=="Тёмная"?16:33);
   bool run=mediaPlaying&&IsVisible&&!closing&&(platterRotation!=null||sceneMotion!=null||activeMeter?.Animated==true);
   if(run){motionTime.Start();motionTimer.Start();}
   else{motionTime.Stop();motionTimer.Stop();peakReader.Dispose();if(sceneMotion?.UsesAudio==true)sceneMotion.Silence();}
@@ -66,6 +67,7 @@ public sealed partial class Player
  void RenderMotion(){
   double seconds=motionTime.Elapsed.TotalSeconds;
   if(sceneMotion!=null){
+   if(appearance.Theme=="Тёмная")sceneMotion.AdvanceDarkTrail(seconds);
    if(sceneMotion.UsesAudio&&mediaPlaying&&IsVisible&&seconds-lastSample>=.065){
     var source=session?.SourceAppUserModelId??"";
     sceneMotion.Sample(peakReader.Read(audioSource==source?audioTarget:"",source),appearance.Sensitivity);lastSample=seconds;
