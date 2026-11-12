@@ -96,12 +96,22 @@ sealed class SceneMotion:FrameworkElement{
  double pulse;
  static readonly Pen Ring=new(new SolidColorBrush(Color.FromRgb(173,169,158)),1);
  readonly float[] history=new float[28];
+ int samplesInColumn;
+ const int DarkSamplesPerColumn=3;
  public void Sample(float level,double sensitivity){
   float strength=(float)Math.Min(1,Math.Sqrt(level)*sensitivity);
   if(theme=="Светлая"){pulse+=(strength-pulse)*(strength>pulse?.85:.24);return;}
+  if(theme=="Тёмная"){
+   if(samplesInColumn>0){
+    history[^1]=Math.Max(history[^1],strength);
+    samplesInColumn=(samplesInColumn+1)%DarkSamplesPerColumn;
+    return;
+   }
+   samplesInColumn=1;
+  }
   Array.Copy(history,1,history,0,history.Length-1);history[^1]=strength;
  }
- public void Silence(){pulse=0;Array.Clear(history);InvalidateVisual();}
+ public void Silence(){samplesInColumn=0;pulse=0;Array.Clear(history);InvalidateVisual();}
  static readonly Pen Water=new(new SolidColorBrush(Color.FromArgb(196,227,201,156)),.85);
  static readonly Pen Stem=new(new SolidColorBrush(Color.FromRgb(104,113,83)),.8);
  static readonly Brush Blossom=new SolidColorBrush(Color.FromRgb(181,143,205));
