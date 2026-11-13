@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия без префикса v, например 0.7'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Определить версию
+        id: version
+        shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          $version = if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { $env:INPUT_VERSION } else { $env:GITHUB_REF_NAME -replace '^v','' }
+          if ($version -notmatch '^\d+\.\d+(\.\d+)?(-[0-9A-Za-z.-]+)?$') { throw "Некорректная версия: $version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Собрать самодостаточную версию
+        shell: pwsh
+        run: dotnet publish Source/MiniPlayer.csproj -c Release -r win-x64 --self-contained true -p:Version=${{ steps.version.outputs.version }} -o publish/App
+
+      - name: Упаковать архив
+        id: pack
+        shell: pwsh
+        run: |
+          Copy-Item Run.cmd, Install.cmd, Install.ps1 publish/
+          $zip = "MiniPlayer-${{ steps.version.outputs.version }}-win-x64.zip"
+          Compress-Archive -Path publish/* -DestinationPath $zip
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+
+      - name: Опубликовать релиз
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $flags = @('--generate-notes', '--title', "Mini Player $tag")
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $flags += @('--target', '${{ github.sha }}') }
+          if ($tag -match '-') { $flags += '--prerelease' }
+          gh release create $tag '${{ steps.pack.outputs.zip }}' @flags
