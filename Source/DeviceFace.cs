@@ -149,8 +149,7 @@ public sealed partial class Player
    string theme=appearance.Theme;
    if(theme is "Светлая" or "Кофе" or "Лес" or "Терминал" or "Ретро" or "Лаванда" or "Персик" or "Ночной океан" or "Тёмная" or "Minecraft"){
     sceneMotion=new SceneMotion(theme);
-    if(theme=="Minecraft"){Box(88,25,116,35,B("#BE303626"),1);Put(sceneMotion,91,26,110,32);}
-    else Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
+    Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
    }
    var pos=studio.Artwork;
    var (factor,limit,radius,edge,mat)=theme switch{

@@ -53,9 +53,7 @@ sealed class StudioArt:FrameworkElement{
     for(int layer=0;layer<3;layer++)for(int i=0;i<16;i++){double x=i*12+rnd.Next(-5,5),y=34+layer*22+rnd.Next(-8,10),h=18+layer*8+rnd.Next(10);d.PushTransform(new TranslateTransform(x,y));d.PushTransform(new ScaleTransform(h/29,h/29));P("M0,0 L-5,10 -2,9 -8,18 -4,17 -11,29 H11 L4,17 8,18 2,9 5,10Z",new[]{"#78988B","#476E60","#214C40"}[layer]);d.Pop();d.Pop();}break;
    case "Minecraft":
     Rect(0,0,160,100,G("#B890AD","#F8C995"));Rect(122,12,12,23,B("#FFE7AE"));
-    for(int i=0;i<20;i++){int y=48+(int)(10*Math.Sin(i*.48));Rect(i*8,y,8,100-y,B("#526653"));Rect(i*8,y,8,5,B("#8C9B64"));}
-    for(int i=0;i<20;i++){int y=68+(int)(11*Math.Sin(i*.42+1));Rect(i*8,y,8,100-y,B("#68503A"));Rect(i*8,y,8,7,B("#7D9A43"));Rect(i*8+2,y+10,3,4,B("#826346"));}
-    Rect(29,42,4,24,B("#705036"));Rect(20,29,22,19,B("#536A36"));Rect(24,21,14,13,B("#829B48"));break;
+break;
    case "Ночной океан":
     Rect(0,0,160,100,G("#111B34","#475367"),7);E(85,28,12,7.5,B("#FFDFAC"));Rect(0,53,160,47,G("#4F616E","#162E42"));
 
@@ -129,7 +127,26 @@ sealed class SceneMotion:FrameworkElement{
  static readonly Pen Water=new(new SolidColorBrush(Color.FromArgb(196,227,201,156)),.85);
  static readonly Pen Stem=new(new SolidColorBrush(Color.FromRgb(104,113,83)),.8);
  static readonly Brush Blossom=new SolidColorBrush(Color.FromRgb(181,143,205));
- static readonly Brush Pixel=new SolidColorBrush(Color.FromRgb(157,204,83));
+ static SolidColorBrush TerrainBrush(byte r,byte g,byte b){var brush=new SolidColorBrush(Color.FromRgb(r,g,b));brush.Freeze();return brush;}
+ static readonly Brush Ridge=TerrainBrush(82,102,83), RidgeGrass=TerrainBrush(140,155,100),
+  Dirt=TerrainBrush(104,80,58), Grass=TerrainBrush(125,154,67), Stone=TerrainBrush(130,99,70),
+  Trunk=TerrainBrush(112,80,54), Leaves=TerrainBrush(83,106,54), Crown=TerrainBrush(130,155,72);
+ void DrawHills(DrawingContext d){
+  void Block(Brush fill,double x,double y,double w,double h)=>d.DrawRectangle(fill,null,new Rect(x,y,w,h));
+  // Average adjacent samples so a beat lifts a hillside across several blocks.
+  double HeightSignal(int i)=>(history[i]+2*history[i+1]+3*history[i+2]+2*history[i+3]+history[i+4])/9;
+  double treeBase=0;
+  for(int i=0;i<20;i++){
+   double top=48+(int)(10*Math.Sin(i*.48))-2*Math.Round(HeightSignal(i)*7);
+   Block(Ridge,i*8,top,8,100-top);Block(RidgeGrass,i*8,top,8,5);
+   if(i==3)treeBase=top;
+  }
+  Block(Trunk,29,treeBase-18,4,21);Block(Leaves,20,treeBase-32,22,19);Block(Crown,24,treeBase-40,14,13);
+  for(int i=0;i<20;i++){
+   double top=68+(int)(11*Math.Sin(i*.42+1))-2*Math.Round(HeightSignal(i+3)*13);
+   Block(Dirt,i*8,top,8,100-top);Block(Grass,i*8,top,8,7);Block(Stone,i*8+2,top+10,3,4);
+  }
+ }
  static readonly Brush Signal=new SolidColorBrush(Color.FromRgb(192,165,226));
  public SceneMotion(string theme){this.theme=theme;IsHitTestVisible=false;ClipToBounds=true;}
  static readonly Pen Steam=new(new SolidColorBrush(Color.FromArgb(156,255,242,213)),1.4);
@@ -166,10 +183,7 @@ sealed class SceneMotion:FrameworkElement{
     d.DrawRoundedRectangle(Signal,null,new Rect((i-columnFraction)*pitch,98-h,3.9,h),1,1);
    }
   }else if(theme=="Minecraft"){
-   for(int i=0;i<history.Length;i++){
-    int cells=(int)Math.Ceiling(history[i]*89/15);
-    for(int k=0;k<cells;k++)d.DrawRectangle(Pixel,null,new Rect(i*5.7,84-k*15,4.3,11));
-   }
+   DrawHills(d);
   }else if(theme=="Ночной океан"){
    for(int i=0;i<60;i++){
     double y=55+i*.7;double ripple=Math.Sin(i*.89+Phase*1.15);
