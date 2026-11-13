@@ -45,8 +45,7 @@ sealed class StudioArt:FrameworkElement{
    case "Лаванда":
     Rect(0,0,160,100,G("#BDAAD9","#F6D8C7"),5);E(111,27,7,12,B("#FFF0CD"));
     P("M0,53 Q40,33 79,49 T160,46 L160,100 H0Z","#AF9CBA");P("M0,64 Q64,43 160,58 V100 H0Z","#9884A4");
-    for(int i=-5;i<10;i++){double x=i*31;var geo=new StreamGeometry();using(var g=geo.Open()){g.BeginFigure(new Point(84+(x-84)*.13,54),true,true);g.LineTo(new Point(x+16,100),true,false);g.LineTo(new Point(x-8,100),true,false);}d.DrawGeometry(G("#B8A2C6","#77578A"),null,geo);}
-    for(int i=0;i<33;i++){double x=rnd.Next(160),y=rnd.Next(76,110);Line(x,y,x+2,y-9,"#767A66",.65);E(x+2,y-9,1.2,3,B("#D7B5EE"));}break;
+    Rect(0,55,160,45,G("#ACA2B7","#746984"));break;
    case "Лес":
     Rect(0,0,160,100,G("#B3CBBD","#4B756B"),7);
     P("M0,44 L36,19 60,32 95,10 160,47 V100 H0Z","#829F94");
@@ -126,7 +125,34 @@ sealed class SceneMotion:FrameworkElement{
  public void Silence(){previousFrame=-1;columnFraction=0;Array.Clear(darkPeaks);Array.Clear(darkHeights);pulse=0;Array.Clear(history);InvalidateVisual();}
  static readonly Pen Water=new(new SolidColorBrush(Color.FromArgb(196,227,201,156)),.85);
  static readonly Pen Stem=new(new SolidColorBrush(Color.FromRgb(104,113,83)),.8);
- static readonly Brush Blossom=new SolidColorBrush(Color.FromRgb(181,143,205));
+ static readonly DrawingGroup[] LavenderSprigs=CreateSprigs();
+ static DrawingGroup[] CreateSprigs(){
+  var sprites=new DrawingGroup[3];
+  var petals=new[]{Color.FromRgb(161,131,183),Color.FromRgb(182,149,203),Color.FromRgb(197,167,214)};
+  for(int i=0;i<sprites.Length;i++){
+   var sprig=new DrawingGroup();using(var pen=sprig.Open()){
+    var flower=new SolidColorBrush(petals[i]);
+    pen.DrawLine(Stem,new Point(0,0),new Point(0,-12));
+    pen.DrawLine(Stem,new Point(0,-3),new Point(-1.2,-5.5));
+    for(int j=0;j<5;j++)pen.DrawEllipse(flower,null,new Point((j%2==0?-.42:.42),-8.2-j*.93),.65,.97);
+   }
+   sprig.Freeze();sprites[i]=sprig;
+  }
+  return sprites;
+ }
+ void DrawLavender(DrawingContext d){
+  for(int row=0;row<9;row++){
+   double depth=row/8d,y=55+48*Math.Pow(depth,1.45);
+   double scale=.19+.88*depth,spacing=2.65+4.4*depth;
+   for(int col=-1;col*spacing<164;col++){
+    double x=(col+(row%2)*.5)*spacing;
+    double angle=8*Math.Sin(Phase*.82-x*.039-row*.21)+2*Math.Sin(Phase*1.17+x*.065);
+    double radians=angle*Math.PI/180,cs=scale*Math.Cos(radians),sn=scale*Math.Sin(radians);
+    d.PushTransform(new MatrixTransform(cs,sn,-sn,cs,x,y+.55*Math.Sin(col*2.3+row)));
+    d.DrawDrawing(LavenderSprigs[(col+1+row*2)%3]);d.Pop();
+   }
+  }
+ }
  static SolidColorBrush TerrainBrush(byte r,byte g,byte b){var brush=new SolidColorBrush(Color.FromRgb(r,g,b));brush.Freeze();return brush;}
  static readonly Brush Ridge=TerrainBrush(82,102,83), RidgeGrass=TerrainBrush(140,155,100),
   Dirt=TerrainBrush(104,80,58), Grass=TerrainBrush(125,154,67), Stone=TerrainBrush(130,99,70),
@@ -192,9 +218,7 @@ sealed class SceneMotion:FrameworkElement{
     d.PushOpacity(.5+.24*ripple);d.DrawLine(Water,new Point(x-width,y),new Point(x+width,y));d.Pop();
    }
   }else if(theme=="Лаванда"){
-   for(int i=0;i<12;i++){double x=6+i*14,y=99-i%3*3,lean=2+2*Math.Sin(Phase*.9+i*.3);
-    d.DrawLine(Stem,new Point(x,y),new Point(x+lean,y-15));for(int j=0;j<4;j++)d.DrawEllipse(Blossom,null,new Point(x+lean+(j%2==0?-.6:.6),y-15+j*1.6),.9,1.5);
-   }
+   DrawLavender(d);
   }else if(theme=="Персик"){
    for(int i=0;i<3;i++){double a=Phase*.8+i*2;d.PushOpacity(.18+.13*Math.Sin(a));d.DrawEllipse(Brushes.White,null,new Point(100+i*5+Math.Cos(a)*1.4,41+i*3),1.7,1);d.Pop();}
   }else if(theme=="Терминал"){
