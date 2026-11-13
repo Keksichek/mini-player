@@ -52,6 +52,8 @@ public sealed partial class Player : Window
  string seekTrack="";
  void SetSeekFromPointer(double x){seek.Value=seek.Minimum+Math.Clamp((x-9)/Math.Max(1,seek.ActualWidth-18),0,1)*(seek.Maximum-seek.Minimum);}
  void SetExpanded(bool value){expanded=value;details.Visibility=value?Visibility.Visible:Visibility.Collapsed;Width=(deviceFace!=null?Math.Max(deviceFace.Width+16+2*appearance.BorderWidth,value?350:0):value?350:300)*appearance.Scale;Height=(deviceFace!=null?deviceFace.Height+16+2*appearance.BorderWidth+(value?216:0):value?350:144)*appearance.Scale;Top=Math.Min(Top,SystemParameters.WorkArea.Bottom-Height);}
+ // Приложения редко публикуют позицию, поэтому во время воспроизведения досчитываем её от момента последнего обновления.
+ static double LivePosition(TimeSpan position,DateTimeOffset updated,DateTimeOffset now,double rate,bool playing){var elapsed=now-updated;return playing&&updated.Year>2000&&elapsed>TimeSpan.Zero?position.TotalSeconds+elapsed.TotalSeconds*rate:position.TotalSeconds;}
  async Task Seek(){
   if(session==null||!seek.IsEnabled||seekTrack!=track)return;
   try{if(!await session.TryChangePlaybackPositionAsync(TimeSpan.FromSeconds(seek.Value).Ticks))status.Text="Источник отклонил перемотку.";}catch{status.Text="Перемотка недоступна.";}
@@ -158,7 +160,7 @@ public sealed partial class Player : Window
    play.IsEnabled=playback.Controls.IsPlayPauseToggleEnabled||(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing?playback.Controls.IsPauseEnabled:playback.Controls.IsPlayEnabled);
    prev.ToolTip=prev.IsEnabled?"Предыдущий":"Сайт не предоставляет предыдущий трек";next.ToolTip=next.IsEnabled?"Следующий":"Сайт не предоставляет следующий трек";
    var timeline=session.GetTimelineProperties();
-   if(!seeking){updatingSeek=true;seek.Minimum=Math.Max(0,timeline.MinSeekTime.TotalSeconds);seek.Maximum=Math.Max(seek.Minimum+1,timeline.MaxSeekTime.TotalSeconds>0?timeline.MaxSeekTime.TotalSeconds:timeline.EndTime.TotalSeconds);seek.IsEnabled=playback.Controls.IsPlaybackPositionEnabled&&timeline.EndTime>TimeSpan.Zero;seek.Value=Math.Clamp(timeline.Position.TotalSeconds,seek.Minimum,seek.Maximum);timeLabel.Text=$"{TimeSpan.FromSeconds(seek.Value):m\\:ss} / {timeline.EndTime:m\\:ss}";updatingSeek=false;}
+   if(!seeking){updatingSeek=true;seek.Minimum=Math.Max(0,timeline.MinSeekTime.TotalSeconds);seek.Maximum=Math.Max(seek.Minimum+1,timeline.MaxSeekTime.TotalSeconds>0?timeline.MaxSeekTime.TotalSeconds:timeline.EndTime.TotalSeconds);seek.IsEnabled=playback.Controls.IsPlaybackPositionEnabled&&timeline.EndTime>TimeSpan.Zero;seek.Value=Math.Clamp(LivePosition(timeline.Position,timeline.LastUpdatedTime,DateTimeOffset.Now,playback.PlaybackRate??1,mediaPlaying),seek.Minimum,seek.Maximum);timeLabel.Text=$"{TimeSpan.FromSeconds(seek.Value):m\\:ss} / {timeline.EndTime:m\\:ss}";updatingSeek=false;}
    var requestedSession=session;var media=await requestedSession.TryGetMediaPropertiesAsync();if(!Equals(requestedSession,session))return;var key=session.SourceAppUserModelId+"|"+media.Title+"|"+media.Artist;
    title.Text=string.IsNullOrEmpty(media.Title)?"Без названия":media.Title;artist.Text=media.Artist;
    if(key!=track){track=key;cover.Source=null;if(media.Thumbnail!=null){using var stream=await media.Thumbnail.OpenReadAsync();if(stream.Size<=8*1024*1024){using var reader=new DataReader(stream);await reader.LoadAsync((uint)stream.Size);var data=new byte[(int)stream.Size];reader.ReadBytes(data);using var memory=new System.IO.MemoryStream(data);var bitmap=new BitmapImage();bitmap.BeginInit();bitmap.CacheOption=BitmapCacheOption.OnLoad;bitmap.DecodePixelWidth=152;bitmap.StreamSource=memory;bitmap.EndInit();bitmap.Freeze();cover.Source=bitmap;}}}
@@ -197,10 +199,11 @@ public sealed partial class Player : Window
      var point=player.seekHit.TranslatePoint(new Point(player.seekHit.ActualWidth*fraction,y),root);
      if(!ReferenceEquals(VisualTreeHelper.HitTest(root,point)?.VisualHit,player.seekHit))throw new Exception("Timeline click surface missed at "+fraction+","+y);
     }
+    var updated=new DateTimeOffset(2026,1,1,0,0,0,TimeSpan.Zero);if(LivePosition(TimeSpan.FromSeconds(10),updated,updated.AddSeconds(5),1,true)!=15||LivePosition(TimeSpan.FromSeconds(10),updated,updated.AddSeconds(5),1,false)!=10||LivePosition(TimeSpan.FromSeconds(10),updated,updated.AddSeconds(4),1.5,true)!=16||LivePosition(TimeSpan.FromSeconds(10),default,updated,1,true)!=10)throw new Exception("Live position failed");
     if(ColorWheel.Hsv(0,1,1)!=Colors.Red||ColorWheel.Hsv(120,1,1)!=Colors.Lime||ColorWheel.Hsv(240,1,1)!=Colors.Blue||ColorWheel.Hsv(0,0,1)!=Colors.White||ColorWheel.Hsv(0,1,0)!=Colors.Black)throw new Exception("Color conversion failed");
     player.Topmost=false;player.UpdatePin();if(((System.Windows.Shapes.Path)player.pinButton!.Content).RenderTransform is not RotateTransform off||off.Angle!=-45)throw new Exception("Unpinned state failed");player.Topmost=true;player.UpdatePin();
     string audio;try{var entries=Audio.List();audio=entries.All(e=>e.Volume>=0&&e.Volume<=100)?"Application audio enumeration: PASS ("+entries.Count+")":"Invalid session volume";}catch(Exception ex){audio="Core Audio unavailable in test session: "+ex.Message;}
-    System.IO.File.WriteAllText(args[1],"Seek coordinates: start/middle/end PASS\nTimeline hit targets: 9/9 PASS\nCompact layout: "+player.Width+" x "+player.Height+"\n"+audio);
+    System.IO.File.WriteAllText(args[1],"Seek coordinates: start/middle/end PASS\nLive position: PASS\nTimeline hit targets: 9/9 PASS\nCompact layout: "+player.Width+" x "+player.Height+"\n"+audio);
    }catch(Exception ex){System.IO.File.WriteAllText(args[1],ex.ToString());Environment.ExitCode=1;}finally{player.tray.Dispose();}return;
   }
   if(args.Length==2&&args[0]=="--preview"){
