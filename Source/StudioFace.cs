@@ -129,7 +129,7 @@ sealed class SceneMotion:FrameworkElement{
    int index=row*5+col;
    double x=6+col*29+(row*5+col*3)%8,y=6+row*15+(col*3+row)%5;
    bool behindText=x<110 && (y is >=15 and <=47 or >=55 and <=72 || (x<67 && y>=77));
-   double glow=.16+.085*Math.Sin(Phase*.87+index*2.39);
+   double glow=.16+.085*Math.Sin(Phase*1.75+index*2.39);
    d.PushOpacity(behindText?glow*.44:glow);
    d.PushTransform(new TranslateTransform(x,y));
    d.DrawGeometry(TerminalPhosphor,null,terminalGlyphs[(row*3+col)%terminalGlyphs.Length]);
