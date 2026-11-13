@@ -60,9 +60,9 @@ static class Audio {
      bool match=selected.Length>0?string.Equals(selected,name,StringComparison.OrdinalIgnoreCase):Match(source,new[]{new Entry(name,0)})!=null;
      if(!match||item is not IMeter meter)return false;
      meters.Add(meter);return true;
-    });}catch(COMException){}
+    });}catch(Exception ex) when(ex is COMException or UnauthorizedAccessException){}
    }
-   float peak=0;foreach(var meter in meters){try{meter.GetPeakValue(out float value);peak=Math.Max(peak,value);}catch(COMException){}}
+   float peak=0;foreach(var meter in meters){try{meter.GetPeakValue(out float value);peak=Math.Max(peak,value);}catch(Exception ex) when(ex is COMException or UnauthorizedAccessException){}}
    return Math.Clamp(peak,0,1);
   }
   public void Dispose(){foreach(var m in meters)Marshal.ReleaseComObject(m);meters.Clear();current="";refreshAt=0;}
