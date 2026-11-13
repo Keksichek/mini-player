@@ -57,10 +57,7 @@ break;
     Rect(0,0,160,100,G("#111B34","#475367"),7);E(85,28,12,7.5,B("#FFDFAC"));Rect(0,53,160,47,G("#4F616E","#162E42"));
 
     for(int i=0;i<34;i++){double x=rnd.Next(160),y=rnd.Next(1,42);E(x,y,.5,.5,B("#D8DDDF"));}break;
-   case "Персик":
-    E(91,81,52,9,B("#ECC1A2"));E(65,55,36,30,G("#FFCB89","#EA7867",50));E(95,53,36,32,G("#FFDA96","#E98B72",60));
-    P("M76,38 Q70,13 111,9 Q104,30 76,38Z","#698A59");P("M76,39 Q71,20 59,15 L62,12 Q76,18 80,36Z","#916647");
-    for(int i=0;i<35;i++){double a=rnd.NextDouble()*Math.PI*2,r=rnd.NextDouble()*23;E(97+Math.Cos(a)*r,55+Math.Sin(a)*r,.65,.6,B("#E39170"));}break;
+   case "Персик":break; // The fruit and its shadow are drawn together in SceneMotion.
    case "Ретро":
     Rect(0,0,160,100,G("#534B4A","#2E3232"),8);Rect(7,8,146,76,B("#D2AE78"),4);
     for(int i=0;i<3;i++)Rect(7,15+i*5,146,4,B(new[]{"#AF5042","#DB794C","#F2B663"}[i]));
@@ -206,6 +203,32 @@ sealed class SceneMotion:FrameworkElement{
  static readonly Brush[] PineInks={TerrainBrush(120,152,139),TerrainBrush(71,110,96),TerrainBrush(33,76,64)};
  static readonly Brush Cloud=new RadialGradientBrush(Color.FromArgb(116,236,246,237),Color.FromArgb(0,236,246,237));
  static readonly Brush Halo=new RadialGradientBrush(Color.FromArgb(165,255,232,146),Color.FromArgb(0,255,232,146));
+ static readonly DrawingGroup PeachSkin=CreatePeachSkin();
+ static readonly Geometry PeachLeaf=Geometry.Parse("M76,38 Q70,13 111,9 Q104,30 76,38Z");
+ static readonly Brush LeafInk=TerrainBrush(105,138,89), PeachShadow=TerrainBrush(236,193,162);
+ static readonly Pen LeafVein=new(TerrainBrush(144,164,105),.75);
+ static DrawingGroup CreatePeachSkin(){
+  var skin=new DrawingGroup();
+  using(var dc=skin.Open()){
+   dc.DrawEllipse(new LinearGradientBrush(Color.FromRgb(255,203,137),Color.FromRgb(234,120,103),50),null,new Point(65,55),36,30);
+   dc.DrawEllipse(new LinearGradientBrush(Color.FromRgb(255,218,150),Color.FromRgb(233,139,114),60),null,new Point(95,53),36,32);
+   var rng=new Random(31);var freckle=TerrainBrush(227,145,112);
+   for(int i=0;i<35;i++){double a=rng.NextDouble()*Math.PI*2,r=rng.NextDouble()*23;dc.DrawEllipse(freckle,null,new Point(97+Math.Cos(a)*r,55+Math.Sin(a)*r),.65,.6);}
+   dc.DrawGeometry(TerrainBrush(145,102,71),null,Geometry.Parse("M76,39 Q71,20 59,15 L62,12 Q76,18 80,36Z"));
+  }
+  skin.Freeze();return skin;
+ }
+ void DrawPeach(DrawingContext d){
+  double phase=Phase*1.12,roll=Math.Sin(phase);
+  d.DrawEllipse(PeachShadow,null,new Point(88+2.4*roll,83),49+1.8*roll,7.5-.5*roll);
+  d.PushTransform(new TranslateTransform(2.6*roll,0));
+  d.PushTransform(new RotateTransform(5.2*roll,80,83));
+  d.DrawDrawing(PeachSkin);
+  for(int i=0;i<3;i++){d.PushOpacity(.18+.10*Math.Sin(phase-.5+i));d.DrawEllipse(Brushes.White,null,new Point(101+i*4,41+i*2.6),1.5,.9);d.Pop();}
+  d.PushTransform(new RotateTransform(6*Math.Sin(phase-.65)+2*Math.Sin(Phase*1.8),76,38));
+  d.DrawGeometry(LeafInk,null,PeachLeaf);d.DrawLine(LeafVein,new Point(79,34),new Point(103,15));
+  d.Pop();d.Pop();d.Pop();
+ }
  void DrawForest(DrawingContext d){
   for(int i=0;i<3;i++){
    double x=(Phase*(.95+i*.18)+i*83+70)%300-70,y=17+i*7;
@@ -299,7 +322,7 @@ sealed class SceneMotion:FrameworkElement{
   }else if(theme=="Лаванда"){
    DrawLavender(d);
   }else if(theme=="Персик"){
-   for(int i=0;i<3;i++){double a=Phase*.8+i*2;d.PushOpacity(.18+.13*Math.Sin(a));d.DrawEllipse(Brushes.White,null,new Point(100+i*5+Math.Cos(a)*1.4,41+i*3),1.7,1);d.Pop();}
+   DrawPeach(d);
   }else if(theme=="Терминал"){
    DrawTerminal(d);
    d.PushOpacity(.25+.75*(.5+.5*Math.Cos(Phase*3)));d.DrawRectangle(Lamp,null,new Rect(62,84,5,2));d.Pop();
