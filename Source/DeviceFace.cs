@@ -145,10 +145,12 @@ public sealed partial class Player
   double scale=appearance.CoverSize/52;
   if(studio!=null){
    var scene=studio.Scene;
-   Put(new StudioArt(appearance.Theme),scene.X,scene.Y,scene.Width,scene.Height);
+   var backdrop=new StudioArt(appearance.Theme);
+   if(appearance.Theme=="Лес")backdrop.Clip=new RectangleGeometry(new Rect(scene.Size),9,9);
+   Put(backdrop,scene.X,scene.Y,scene.Width,scene.Height);
    string theme=appearance.Theme;
    if(theme is "Светлая" or "Кофе" or "Лес" or "Терминал" or "Ретро" or "Лаванда" or "Персик" or "Ночной океан" or "Тёмная" or "Minecraft"){
-    sceneMotion=new SceneMotion(theme);
+    sceneMotion=new SceneMotion(theme){Clip=backdrop.Clip};
     Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
    }
    var pos=studio.Artwork;

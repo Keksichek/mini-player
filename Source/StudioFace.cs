@@ -47,9 +47,9 @@ sealed class StudioArt:FrameworkElement{
     P("M0,53 Q40,33 79,49 T160,46 L160,100 H0Z","#AF9CBA");P("M0,64 Q64,43 160,58 V100 H0Z","#9884A4");
     Rect(0,55,160,45,G("#ACA2B7","#746984"));break;
    case "Лес":
-    Rect(0,0,160,100,G("#B3CBBD","#4B756B"),7);
+    Rect(0,0,160,100,G("#B3CBBD","#4B756B"));
     P("M0,44 L36,19 60,32 95,10 160,47 V100 H0Z","#829F94");
-    for(int layer=0;layer<3;layer++)for(int i=0;i<16;i++){double x=i*12+rnd.Next(-5,5),y=34+layer*22+rnd.Next(-8,10),h=18+layer*8+rnd.Next(10);d.PushTransform(new TranslateTransform(x,y));d.PushTransform(new ScaleTransform(h/29,h/29));P("M0,0 L-5,10 -2,9 -8,18 -4,17 -11,29 H11 L4,17 8,18 2,9 5,10Z",new[]{"#78988B","#476E60","#214C40"}[layer]);d.Pop();d.Pop();}break;
+break;
    case "Minecraft":
     Rect(0,0,160,100,G("#B890AD","#F8C995"));Rect(122,12,12,23,B("#FFE7AE"));
 break;
@@ -165,6 +165,39 @@ sealed class SceneMotion:FrameworkElement{
   }
   plants.Sort((a,b)=>a.Y.CompareTo(b.Y));return plants.ToArray();
  }
+ readonly record struct Fir(double X,double Base,double Scale,int Layer);
+ static readonly Fir[] Grove=PlantForest();
+ static Fir[] PlantForest(){
+  var trees=new Fir[48];var random=new Random(31);
+  for(int layer=0;layer<3;layer++)for(int i=0;i<16;i++){
+   double x=i*12+random.Next(-5,5),tip=34+layer*22+random.Next(-8,10),height=18+layer*8+random.Next(10);
+   trees[layer*16+i]=new Fir(x,tip+height,height/29,layer);
+  }
+  return trees;
+ }
+ static readonly Geometry FirOutline=Geometry.Parse("M0,-29 L-5,-19 -2,-20 -8,-11 -4,-12 -11,0 H11 L4,-12 8,-11 2,-20 5,-19 Z");
+ static readonly Brush[] PineInks={TerrainBrush(120,152,139),TerrainBrush(71,110,96),TerrainBrush(33,76,64)};
+ static readonly Brush Cloud=new RadialGradientBrush(Color.FromArgb(116,236,246,237),Color.FromArgb(0,236,246,237));
+ static readonly Brush Halo=new RadialGradientBrush(Color.FromArgb(165,255,232,146),Color.FromArgb(0,255,232,146));
+ void DrawForest(DrawingContext d){
+  for(int i=0;i<3;i++){
+   double x=(Phase*(.95+i*.18)+i*83+70)%300-70,y=17+i*7;
+   d.DrawEllipse(Cloud,null,new Point(x,y),32+i*4,3.6);
+   d.DrawEllipse(Cloud,null,new Point(x+10,y-2),16,3.2);
+  }
+  foreach(var tree in Grove){
+   double wind=.075*Math.Sin(Phase*.85-tree.X*.045)+.025*Math.Sin(Phase*1.31+tree.Base*.09);
+   double scale=tree.Scale;
+   d.PushTransform(new MatrixTransform(scale,0,wind*scale*(.65+tree.Layer*.2),scale,tree.X,tree.Base));
+   d.DrawGeometry(PineInks[tree.Layer],null,FirOutline);d.Pop();
+  }
+  for(int i=0;i<9;i++){
+   double a=Phase*(.49+i*.019)+i*2.4;
+   var pos=new Point(8+i*18+3*Math.Cos(a),53+(i*17)%39+2*Math.Sin(a*.83));
+   d.PushOpacity(.10+.83*Math.Pow(.5+.5*Math.Sin(a*1.57),2));
+   d.DrawEllipse(Halo,null,pos,4,2.4);d.DrawEllipse(Lamp,null,pos,.96,.57);d.Pop();
+  }
+ }
  void DrawLavender(DrawingContext d){
   foreach(var plant in Field){
    double angle=plant.Lean+8*Math.Sin(Phase*.82-plant.X*.039-plant.Y*.035)+2*Math.Sin(Phase*1.17+plant.X*.065);
@@ -220,8 +253,7 @@ sealed class SceneMotion:FrameworkElement{
     double a=Phase+i*2*Math.PI/3;d.DrawLine(Spoke,new Point(x+3*Math.Cos(a),54+3*Math.Sin(a)),new Point(x+7*Math.Cos(a),54+7*Math.Sin(a)));
    }
   }else if(theme=="Лес"){
-   d.PushOpacity(.055);d.DrawEllipse(Brushes.White,null,new Point(68+18*Math.Sin(Phase*.19),42),60,3);d.Pop();
-   for(int i=0;i<6;i++){double a=Phase*.5+i*7;d.PushOpacity(.3+.5*(.5+.5*Math.Sin(a)));d.DrawEllipse(Lamp,null,new Point(13+i*26+4*Math.Cos(a),49+i%3*14+3*Math.Sin(a)),1.3,.8);d.Pop();}
+   DrawForest(d);
   }else if(theme=="Тёмная"){
    const double pitch=160d/28;
    for(int i=0;i<darkHeights.Length;i++){
