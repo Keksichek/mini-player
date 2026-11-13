@@ -52,6 +52,14 @@ public sealed partial class Player : Window
  string seekTrack="";
  void SetSeekFromPointer(double x){seek.Value=seek.Minimum+Math.Clamp((x-9)/Math.Max(1,seek.ActualWidth-18),0,1)*(seek.Maximum-seek.Minimum);}
  void SetExpanded(bool value){expanded=value;details.Visibility=value?Visibility.Visible:Visibility.Collapsed;Width=(deviceFace!=null?Math.Max(deviceFace.Width+16+2*appearance.BorderWidth,value?350:0):value?350:300)*appearance.Scale;Height=(deviceFace!=null?deviceFace.Height+16+2*appearance.BorderWidth+(value?216:0):value?350:144)*appearance.Scale;Top=Math.Min(Top,SystemParameters.WorkArea.Bottom-Height);}
+ static Point Fit(Rect window,Rect area)=>new(Math.Clamp(window.X,area.Left,Math.Max(area.Left,area.Right-window.Width)),Math.Clamp(window.Y,area.Top,Math.Max(area.Top,area.Bottom-window.Height)));
+ // Возвращает окно в рабочую область монитора, на котором находится его центр, чтобы плеер нельзя было утащить за край экрана.
+ void KeepOnScreen(){
+  if(PresentationSource.FromVisual(this)?.CompositionTarget is not {} target)return;
+  var center=target.TransformToDevice.Transform(new Point(Left+Width/2,Top+Height/2));var work=System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point((int)center.X,(int)center.Y)).WorkingArea;
+  var area=new Rect(target.TransformFromDevice.Transform(new Point(work.Left,work.Top)),target.TransformFromDevice.Transform(new Point(work.Right,work.Bottom)));
+  var position=Fit(new Rect(Left,Top,Width,Height),area);if(position.X!=Left)Left=position.X;if(position.Y!=Top)Top=position.Y;
+ }
  async Task Seek(){
   if(session==null||!seek.IsEnabled||seekTrack!=track)return;
   try{if(!await session.TryChangePlaybackPositionAsync(TimeSpan.FromSeconds(seek.Value).Ticks))status.Text="Источник отклонил перемотку.";}catch{status.Text="Перемотка недоступна.";}
@@ -77,7 +85,7 @@ public sealed partial class Player : Window
    if(dragOrigin is not Point start)return;
    var delta=e.GetPosition(this)-start;
    if(Math.Abs(delta.X)<SystemParameters.MinimumHorizontalDragDistance&&Math.Abs(delta.Y)<SystemParameters.MinimumVerticalDragDistance)return;
-   dragOrigin=null;System.Windows.Input.Mouse.Capture(null);e.Handled=true;DragMove();Save();
+   dragOrigin=null;System.Windows.Input.Mouse.Capture(null);e.Handled=true;DragMove();KeepOnScreen();Save();
   };
   var stack=new StackPanel();body.Child=stack;
   var header=new DockPanel{Margin=new Thickness(0,0,0,4)};
@@ -110,6 +118,7 @@ public sealed partial class Player : Window
   motionTimer.Tick+=(_,_)=>RenderMotion();
   IsVisibleChanged+=(_,_)=>SyncMotion();
   Closing+=(_,_)=>{peakReader.Dispose();motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
+  SizeChanged+=(_,_)=>KeepOnScreen();
   Loaded+=async(_,_)=>{ImportLegacySettings();LoadSettings();LoadAppearance();try{manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();await Refresh();timer.Start();}catch(Exception ex){status.Text="Нет доступа к медиасессиям Windows: "+ex.Message;}};
   timer.Tick+=async(_,_)=>await Refresh();
  }
@@ -184,7 +193,7 @@ public sealed partial class Player : Window
    }
   }
  }
- void LoadSettings(){try{var s=System.Text.Json.JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(settingsPath));if(s!=null){Left=Math.Clamp(s.X,SystemParameters.VirtualScreenLeft,SystemParameters.VirtualScreenLeft+SystemParameters.VirtualScreenWidth-Width);Top=Math.Clamp(s.Y,SystemParameters.VirtualScreenTop,SystemParameters.VirtualScreenTop+SystemParameters.VirtualScreenHeight-Height);Topmost=s.Pin;preferred=s.Source;auto.IsChecked=s.Auto;}}catch{} }
+ void LoadSettings(){try{var s=System.Text.Json.JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(settingsPath));if(s!=null){Left=s.X;Top=s.Y;KeepOnScreen();Topmost=s.Pin;preferred=s.Source;auto.IsChecked=s.Auto;}}catch{} }
  [STAThread] public static void Main(string[] args){
   if(args.Length==2&&args[0]=="--self-test"){
    var applicationTest=new WApplication();var player=new Player();player.tray.Visible=false;
@@ -197,10 +206,11 @@ public sealed partial class Player : Window
      var point=player.seekHit.TranslatePoint(new Point(player.seekHit.ActualWidth*fraction,y),root);
      if(!ReferenceEquals(VisualTreeHelper.HitTest(root,point)?.VisualHit,player.seekHit))throw new Exception("Timeline click surface missed at "+fraction+","+y);
     }
+    var screen=new Rect(0,0,1920,1040);if(Fit(new Rect(-500,-50,300,150),screen)!=new Point(0,0)||Fit(new Rect(1800,1000,300,150),screen)!=new Point(1620,890)||Fit(new Rect(100,200,300,150),screen)!=new Point(100,200)||Fit(new Rect(2100,500,300,150),new Rect(1920,0,1280,1024))!=new Point(2100,500))throw new Exception("Screen bounds failed");
     if(ColorWheel.Hsv(0,1,1)!=Colors.Red||ColorWheel.Hsv(120,1,1)!=Colors.Lime||ColorWheel.Hsv(240,1,1)!=Colors.Blue||ColorWheel.Hsv(0,0,1)!=Colors.White||ColorWheel.Hsv(0,1,0)!=Colors.Black)throw new Exception("Color conversion failed");
     player.Topmost=false;player.UpdatePin();if(((System.Windows.Shapes.Path)player.pinButton!.Content).RenderTransform is not RotateTransform off||off.Angle!=-45)throw new Exception("Unpinned state failed");player.Topmost=true;player.UpdatePin();
     string audio;try{var entries=Audio.List();audio=entries.All(e=>e.Volume>=0&&e.Volume<=100)?"Application audio enumeration: PASS ("+entries.Count+")":"Invalid session volume";}catch(Exception ex){audio="Core Audio unavailable in test session: "+ex.Message;}
-    System.IO.File.WriteAllText(args[1],"Seek coordinates: start/middle/end PASS\nTimeline hit targets: 9/9 PASS\nCompact layout: "+player.Width+" x "+player.Height+"\n"+audio);
+    System.IO.File.WriteAllText(args[1],"Seek coordinates: start/middle/end PASS\nScreen bounds: PASS\nTimeline hit targets: 9/9 PASS\nCompact layout: "+player.Width+" x "+player.Height+"\n"+audio);
    }catch(Exception ex){System.IO.File.WriteAllText(args[1],ex.ToString());Environment.ExitCode=1;}finally{player.tray.Dispose();}return;
   }
   if(args.Length==2&&args[0]=="--preview"){
