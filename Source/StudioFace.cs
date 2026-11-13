@@ -5,20 +5,23 @@ using System.Windows.Media;
 namespace MiniPlayer;
 
 // Coordinates refer to the compact face, in device-independent pixels.
-sealed record StudioFace(int Width,int Height,string Paper,string Ink,string Key,string Font,
+sealed record StudioFace(int Width,int Height,string Paper,string Ink,string Key,
  Rect Scene,Point Title,int TextWidth,Point Artwork,Point Controls,Rect Timeline,Point Clock,int KeyWidth,int Radius){
+ public bool SceneIsBackground=>Scene==new Rect(0,0,Width,Height);
+ static StudioFace BackgroundFace(string paper,string ink,string key,int radius)=>
+  new(280,180,paper,ink,key,new(0,0,280,180),new(16,44),248,new(),new(16,100),new(16,142,248,12),new(16,159),32,radius);
  public static StudioFace For(string theme)=>theme switch{
-  "Кофе"=>new(364,162,"#F1DFC1","#422C22","#DAB990","Georgia",new(0,0,144,145),new(208,33),150,new(135,14),new(150,88),new(148,123,201,16),new(152,141),42,12),
-  "Лаванда"=>new(296,224,"#F3EDF7","#483653","#E4D2F0","Georgia",new(0,0,296,103),new(87,109),202,new(9,77),new(73,174),new(6,151,282,16),new(9,201),43,18),
-  "Лес"=>new(350,178,"#173A35","#EDF5E3","#B8CAB4","Georgia",new(0,0,139,178),new(149,44),197,new(35,64),new(149,113),new(148,86,192,18),new(151,150),46,5),
-  "Minecraft"=>new(348,173,"#3A3731","#FFF2D4","#B8AE96","Consolas",new(0,0,348,76),new(86,78),252,new(7,73),new(151,134),new(71,117,265,14),new(8,144),55,0),
-  "Ночной океан"=>new(364,169,"#10283D","#E5F1FA","#9ABACD","Georgia",new(193,0,171,169),new(8,38),178,new(199,34),new(7,99),new(7,137,181,14),new(9,151),47,20),
-  "Персик"=>new(318,192,"#FFEBDA","#62332B","#FFD0AA","Segoe UI",new(174,32,144,109),new(9,42),162,new(5,77),new(76,145),new(79,103,91,15),new(81,123),45,16),
-  "Ретро"=>new(322,205,"#DDCEAA","#413B32","#B8ADA1","Consolas",new(15,14,168,105),new(9,123),296,new(216,37),new(136,177),new(9,163,301,10),new(5,183),53,3),
-  "Терминал"=>new(284,205,"#273431","#BFECC1","#B5C2AC","Consolas",new(0,28,284,112),new(18,46),193,new(209,48),new(51,160),new(17,92,180,18),new(19,116),58,3),
-  "Стекло"=>new(337,164,"#CBE4EF","#193D55","#EDF8FC","Segoe UI",new(0,28,126,128),new(128,42),202,new(18,54),new(128,101),new(128,138,193,15),new(4,140),47,22),
-  "Тёмная"=>new(339,162,"#191A20","#F6EFE9","#BCBAC6","Segoe UI",new(115,74,215,43),new(115,33),215,new(7,18),new(7,128),new(178,128,150,15),new(258,147),49,5),
-  _=>new(351,143,"#F9F7F0","#252831","#E6E4DC","Georgia",new(0,0,119,143),new(128,35),211,new(19,34),new(129,83),new(130,120,146,14),new(279,121),44,21)
+  "Кофе"=>BackgroundFace("#78513B","#FFF2DD","#AA8267",12),
+  "Лаванда"=>BackgroundFace("#76617F","#FFF5FF","#B9A1C7",12),
+  "Лес"=>BackgroundFace("#173A30","#F0F4E7","#6B917A",12),
+  "Minecraft"=>BackgroundFace("#4C5140","#FFF3D9","#8C9D70",2),
+  "Ночной океан"=>BackgroundFace("#102638","#F2F4F3","#4E7689",12),
+  "Персик"=>new(318,192,"#FFEBDA","#62332B","#FFD0AA",new(174,32,144,109),new(9,42),162,new(5,77),new(76,145),new(79,103,91,15),new(81,123),45,16),
+  "Ретро"=>BackgroundFace("#D7C4A3","#3E3027","#B7A181",8),
+  "Терминал"=>BackgroundFace("#0B2018","#D2EBC8","#345E45",4),
+  "Стекло"=>new(337,164,"#CBE4EF","#193D55","#EDF8FC",new(0,28,126,128),new(128,42),202,new(18,54),new(128,101),new(128,138,193,15),new(4,140),47,22),
+  "Тёмная"=>new(339,162,"#191A20","#F6EFE9","#BCBAC6",new(115,74,215,43),new(115,33),215,new(7,18),new(7,128),new(178,128,150,15),new(258,147),49,5),
+  _=>new(351,143,"#F9F7F0","#252831","#E6E4DC",new(0,0,119,143),new(128,35),211,new(19,34),new(129,83),new(130,120,146,14),new(279,121),44,21)
  };
 }
 
@@ -37,35 +40,48 @@ sealed class StudioArt:FrameworkElement{
   var rnd=new Random(31);
   switch(theme){
    case "Кофе":
-    Rect(0,0,160,100,G("#D0AA78","#8D6146",35),12);
-    E(79,57,57,33,B("#926C4E"));E(76,53,58,33,B("#E5C9A7"));E(78,52,51,27,B("#BC9974"));
-    E(122,49,15,11,B("#F7E9D2"));E(123,48,9,6,B("#B3926B"));E(75,48,43,25,B("#FCF1D9"));E(75,47,38,20,G("#8F4829","#C38751",20));
-    for(int i=0;i<5;i++){double y=36+i*4;d.PushTransform(new TranslateTransform(75,y));d.PushTransform(new ScaleTransform(1-i*.12,.65));P("M 0,8 Q -20,3 -18,-4 Q -9,-4 0,4 Q 8,-4 18,-4 Q 20,3 0,8 Z","#FAE7BA");d.Pop();d.Pop();}
-    Line(75,32,75,63,"#FFEFCF",1.1);break;
+    Rect(0,0,160,100,G("#8E674E","#C6A47F",15));
+    E(129,72,61,34,B("#75513E"));E(126,68,59,34,G("#D7BA98","#B59472",30));
+    E(127,67,51,26,B("#A28162"));
+    E(165,57,15,12,B("#E8D5B7"));E(165,57,9,7,B("#967050"));
+    E(123,58,43,27,B("#F7E7CD"));E(123,56,37,21,G("#90522F","#BC8451",15));
+    for(int i=0;i<5;i++){
+     d.PushTransform(new TranslateTransform(123,44+i*4));d.PushTransform(new ScaleTransform(1-i*.13,.65));
+     P("M 0,8 Q -20,3 -18,-4 Q -9,-4 0,4 Q 8,-4 18,-4 Q 20,3 0,8 Z","#F8E4B9");d.Pop();d.Pop();
+    }
+    Line(123,40,123,72,"#F8E5C0",1);break;
    case "Лаванда":
-    Rect(0,0,160,100,G("#BDAAD9","#F6D8C7"),5);E(111,27,7,12,B("#FFF0CD"));
+    Rect(0,0,160,100,G("#B69CCB","#F0CBB5"));E(125,16,7,7,B("#FFF0CD"));
     P("M0,53 Q40,33 79,49 T160,46 L160,100 H0Z","#AF9CBA");P("M0,64 Q64,43 160,58 V100 H0Z","#9884A4");
     Rect(0,55,160,45,G("#ACA2B7","#746984"));break;
    case "Лес":
-    Rect(0,0,160,100,G("#B3CBBD","#4B756B"));
-    P("M0,44 L36,19 60,32 95,10 160,47 V100 H0Z","#829F94");
+    Rect(0,0,160,100,G("#71968A","#163C30"));
+    P("M0,44 L36,19 60,32 95,10 160,47 V100 H0Z","#607F70");
 break;
    case "Minecraft":
-    Rect(0,0,160,100,G("#B890AD","#F8C995"));Rect(122,12,12,23,B("#FFE7AE"));
+    Rect(0,0,160,100,G("#B298A8","#EDC49B"));Rect(128,7,13,13,B("#FFE4A6"));
+    Rect(87,18,19,3,B("#30FFF3DB"));Rect(83,21,29,3,B("#30FFF3DB"));
 break;
    case "Ночной океан":
-    Rect(0,0,160,100,G("#111B34","#475367"),7);E(85,28,12,7.5,B("#FFDFAC"));Rect(0,53,160,47,G("#4F616E","#162E42"));
+    Rect(0,0,160,100,G("#101C30","#415365"));E(128,15,8,8,B("#F5DFB6"));Rect(0,53,160,47,G("#3C5667","#0C2434"));
 
     for(int i=0;i<34;i++){double x=rnd.Next(160),y=rnd.Next(1,42);E(x,y,.5,.5,B("#D8DDDF"));}break;
    case "Персик":break; // The fruit and its shadow are drawn together in SceneMotion.
    case "Ретро":
-    Rect(0,0,160,100,G("#534B4A","#2E3232"),8);Rect(7,8,146,76,B("#D2AE78"),4);
-    for(int i=0;i<3;i++)Rect(7,15+i*5,146,4,B(new[]{"#AF5042","#DB794C","#F2B663"}[i]));
-    Rect(20,35,120,39,B("#403C39"),10);
-    foreach(int x in new[]{43,117}){E(x,54,15,15,B("#E9D8BB"));E(x,54,8,8,B("#504B46"));for(int i=0;i<6;i++){double a=i*Math.PI/3;E(x+9*Math.Cos(a),54+9*Math.Sin(a),2,2,B("#6A5D51"));}}
-    Rect(62,46,36,15,B("#906347"),2);P("M29,100 L35,83 H125 L132,100Z","#71645A");break;
+    Rect(0,0,160,100,G("#D9C5A0","#B7A184",30));Rect(4,4,152,92,B("#E8D8B8"),7);
+    for(int i=0;i<3;i++)Rect(75,17+i*4,85,3,B(new[]{"#A95041","#CD7B4E","#E9B66A"}[i]));
+    Rect(73,39,91,37,B("#625B4E"),17);
+    foreach(int x in new[]{90,145}){
+     E(x,57,13,13,B("#E5D8BE"));E(x,57,7,7,B("#6A6050"));
+     for(int i=0;i<6;i++){double a=i*Math.PI/3;E(x+9*Math.Cos(a),57+9*Math.Sin(a),1.5,1.5,B("#8C7B63"));}
+    }
+    Rect(105,51,27,12,B("#A58B65"),2);
+    P("M75,100 L83,87 H153 L160,100Z","#B09B7B");
+    foreach(var point in new[]{new Point(8,8),new Point(151,8),new Point(8,91),new Point(151,91)})E(point.X,point.Y,1.5,1.5,B("#9C896C"));
+    break;
    case "Терминал":
-    Rect(0,0,160,100,B("#4D554C"),6);Rect(3,4,154,92,G("#111E19","#263B2D"),5);
+    Rect(0,0,160,100,G("#0D261A","#07150F",30));
+    d.DrawRoundedRectangle(new RadialGradientBrush(Color.FromArgb(45,133,197,125),Colors.Transparent),new Pen(B("#356546"),.6),new Rect(2,2,156,96),8,8);
     break;
    case "Стекло":
     Rect(0,0,160,100,G("#8FAFCB","#EEF8F7",40),14);
@@ -112,29 +128,16 @@ sealed class SceneMotion:FrameworkElement{
   for(int i=0;i<darkHeights.Length;i++)darkHeights[i]+=(darkPeaks[i]-darkHeights[i])*blend;
  }
  readonly double[] terminalBars=new double[7];
- static readonly string[] TerminalCode={"0x1A","[buf]","01 10","0xFF"};
- Geometry[]? terminalGlyphs;
  public void AdvanceTerminal(double dt){
   double blend=1-Math.Exp(-Math.Max(0,dt)/.095);
   for(int i=0;i<7;i++)terminalBars[i]+=(history[history.Length-7+i]-terminalBars[i])*blend;
  }
  void DrawTerminal(DrawingContext d){
-  terminalGlyphs??=Array.ConvertAll(TerminalCode,code=>new FormattedText(code,
-   System.Globalization.CultureInfo.InvariantCulture,FlowDirection.LeftToRight,new Typeface("Consolas"),
-   5.5,Brushes.White,VisualTreeHelper.GetDpi(this).PixelsPerDip).BuildGeometry(new Point()));
-  for(int row=0;row<6;row++)for(int col=0;col<5;col++){
-   int index=row*5+col;
-   double x=6+col*29+(row*5+col*3)%8,y=6+row*15+(col*3+row)%5;
-   bool behindText=x<110 && (y is >=15 and <=47 or >=55 and <=72 || (x<67 && y>=77));
-   double glow=.16+.085*Math.Sin(Phase*1.75+index*2.39);
-   d.PushOpacity(behindText?glow*.44:glow);
-   d.PushTransform(new TranslateTransform(x,y));
-   d.DrawGeometry(TerminalPhosphor,null,terminalGlyphs[(row*3+col)%terminalGlyphs.Length]);
-   d.Pop();d.Pop();
-  }
+  var scanline=new Pen(new SolidColorBrush(Color.FromArgb(28,2,8,4)),.55);
+  for(int row=0;row<34;row++)d.DrawLine(scanline,new Point(0,row*3),new Point(160,row*3));
   for(int i=0;i<7;i++){
-   double h=2+15*terminalBars[i];
-   d.DrawRoundedRectangle(TerminalPhosphor,null,new Rect(121+i*4,89-h,2.4,h),.45,.45);
+   double h=1+7*terminalBars[i];
+   d.PushOpacity(.35);d.DrawRectangle(TerminalPhosphor,null,new Rect(127+i*3,86-h,1.5,h));d.Pop();
   }
  }
  static readonly Brush TerminalPhosphor=TerrainBrush(155,203,150);
@@ -236,21 +239,21 @@ sealed class SceneMotion:FrameworkElement{
    d.DrawEllipse(Cloud,null,new Point(x+10,y-2),16,3.2);
   }
   foreach(var tree in Grove){
-   double wind=.075*Math.Sin(Phase*.85-tree.X*.045)+.025*Math.Sin(Phase*1.31+tree.Base*.09);
+   double wind=.02*Math.Sin(Phase*.55-tree.X*.045)+.008*Math.Sin(Phase*.9+tree.Base*.09);
    double scale=tree.Scale;
    d.PushTransform(new MatrixTransform(scale,0,wind*scale*(.65+tree.Layer*.2),scale,tree.X,tree.Base));
    d.DrawGeometry(PineInks[tree.Layer],null,FirOutline);d.Pop();
   }
-  for(int i=0;i<9;i++){
+  for(int i=0;i<4;i++){
    double a=Phase*(.49+i*.019)+i*2.4;
-   var pos=new Point(8+i*18+3*Math.Cos(a),53+(i*17)%39+2*Math.Sin(a*.83));
-   d.PushOpacity(.10+.83*Math.Pow(.5+.5*Math.Sin(a*1.57),2));
+   var pos=new Point(94+i*18+2*Math.Cos(a),53+(i*17)%39+2*Math.Sin(a*.83));
+   d.PushOpacity(.10+.45*Math.Pow(.5+.5*Math.Sin(a*1.57),2));
    d.DrawEllipse(Halo,null,pos,4,2.4);d.DrawEllipse(Lamp,null,pos,.96,.57);d.Pop();
   }
  }
  void DrawLavender(DrawingContext d){
   foreach(var plant in Field){
-   double angle=plant.Lean+8*Math.Sin(Phase*.82-plant.X*.039-plant.Y*.035)+2*Math.Sin(Phase*1.17+plant.X*.065);
+   double angle=plant.Lean+3*Math.Sin(Phase*.55-plant.X*.039-plant.Y*.035)+Math.Sin(Phase*.8+plant.X*.065);
    double radians=angle*Math.PI/180,cs=plant.Scale*Math.Cos(radians),sn=plant.Scale*Math.Sin(radians);
    d.PushTransform(new MatrixTransform(cs,sn,-sn,cs,plant.X,plant.Y));
    d.DrawDrawing(LavenderSprigs[plant.Tint]);d.Pop();
@@ -266,19 +269,19 @@ sealed class SceneMotion:FrameworkElement{
   double HeightSignal(int i)=>(history[i]+2*history[i+1]+3*history[i+2]+2*history[i+3]+history[i+4])/9;
   double treeBase=0;
   for(int i=0;i<20;i++){
-   double top=48+(int)(10*Math.Sin(i*.48))-2*Math.Round(HeightSignal(i)*7);
+   double top=48+(int)(10*Math.Sin(i*.48))-Math.Round(HeightSignal(i)*2);
    Block(Ridge,i*8,top,8,100-top);Block(RidgeGrass,i*8,top,8,5);
-   if(i==3)treeBase=top;
+   if(i==15)treeBase=top;
   }
-  Block(Trunk,29,treeBase-18,4,21);Block(Leaves,20,treeBase-32,22,19);Block(Crown,24,treeBase-40,14,13);
+  Block(Trunk,125,treeBase-18,4,21);Block(Leaves,116,treeBase-32,22,19);Block(Crown,120,treeBase-40,14,13);
   for(int i=0;i<20;i++){
-   double top=68+(int)(11*Math.Sin(i*.42+1))-2*Math.Round(HeightSignal(i+3)*13);
+   double top=68+(int)(11*Math.Sin(i*.42+1))-Math.Round(HeightSignal(i+3)*3);
    Block(Dirt,i*8,top,8,100-top);Block(Grass,i*8,top,8,7);Block(Stone,i*8+2,top+10,3,4);
   }
  }
  static readonly Brush Signal=new SolidColorBrush(Color.FromRgb(192,165,226));
  public SceneMotion(string theme){this.theme=theme;IsHitTestVisible=false;ClipToBounds=true;}
- static readonly Pen Steam=new(new SolidColorBrush(Color.FromArgb(156,255,242,213)),1.4);
+ static readonly Pen Steam=new(new SolidColorBrush(Color.FromArgb(95,255,242,213)),.9);
  static readonly Brush Lamp=new SolidColorBrush(Color.FromRgb(244,229,147));
  static readonly Pen Spoke=new(new SolidColorBrush(Color.FromRgb(220,201,169)),1.15);
  protected override void OnRender(DrawingContext d){
@@ -295,12 +298,12 @@ sealed class SceneMotion:FrameworkElement{
   d.PushTransform(new ScaleTransform(ActualWidth/160,ActualHeight/100));
   if(theme=="Кофе"){
    for(int i=0;i<3;i++){
-    var path=new StreamGeometry();double x=63+i*10,drift=3*Math.Sin(Phase+i);
-    using(var ctx=path.Open()){ctx.BeginFigure(new Point(x,33),false,false);ctx.BezierTo(new Point(x-7+drift,25),new Point(x+9+drift,18),new Point(x+drift,10-i*2+2*Math.Sin(Phase*.7+i)),true,true);}d.DrawGeometry(null,Steam,path);
+    var path=new StreamGeometry();double x=111+i*9,drift=1.5*Math.Sin(Phase*.6+i);
+    using(var ctx=path.Open()){ctx.BeginFigure(new Point(x,38),false,false);ctx.BezierTo(new Point(x-4+drift,31),new Point(x+5+drift,25),new Point(x+drift,19-i*2+Math.Sin(Phase*.4+i)),true,true);}d.DrawGeometry(null,Steam,path);
    }
   }else if(theme=="Ретро"){
-   foreach(int x in new[]{43,117})for(int i=0;i<3;i++){
-    double a=Phase+i*2*Math.PI/3;d.DrawLine(Spoke,new Point(x+3*Math.Cos(a),54+3*Math.Sin(a)),new Point(x+7*Math.Cos(a),54+7*Math.Sin(a)));
+   foreach(int x in new[]{90,145})for(int i=0;i<3;i++){
+    double a=Phase*.55+i*2*Math.PI/3;d.DrawLine(Spoke,new Point(x+2*Math.Cos(a),57+2*Math.Sin(a)),new Point(x+6*Math.Cos(a),57+6*Math.Sin(a)));
    }
   }else if(theme=="Лес"){
    DrawForest(d);
@@ -315,7 +318,7 @@ sealed class SceneMotion:FrameworkElement{
   }else if(theme=="Ночной океан"){
    for(int i=0;i<60;i++){
     double y=55+i*.7;double ripple=Math.Sin(i*.89+Phase*1.15);
-    double x=85+Math.Sin(i*2.399)*(y-52)*.34+ripple*2;
+    double x=128+Math.Sin(i*2.399)*(y-52)*.34+ripple*1.1;
     double width=2+(1+Math.Cos(i*.7-Phase))*(1+(y-53)*.09);
     d.PushOpacity(.5+.24*ripple);d.DrawLine(Water,new Point(x-width,y),new Point(x+width,y));d.Pop();
    }
@@ -325,7 +328,6 @@ sealed class SceneMotion:FrameworkElement{
    DrawPeach(d);
   }else if(theme=="Терминал"){
    DrawTerminal(d);
-   d.PushOpacity(.25+.75*(.5+.5*Math.Cos(Phase*3)));d.DrawRectangle(Lamp,null,new Rect(62,84,5,2));d.Pop();
   }
   d.Pop();
  }

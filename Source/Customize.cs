@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Windows;
-using System.Windows.Documents;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Text.Json;
@@ -26,13 +25,12 @@ public sealed partial class Player
  void LoadAppearance(){try{var a=JsonSerializer.Deserialize<Appearance>(File.ReadAllText(AppearancePath));if(a!=null&&Themes.Contains(a.Theme)&&ValidColor(a.Accent)&&(a.BorderColor==null||ValidColor(a.BorderColor))&&(a.BackgroundColor==null||ValidColor(a.BackgroundColor)))appearance=a with{Sensitivity=Math.Clamp(a.Sensitivity,0,3),Scale=Math.Clamp(a.Scale,0.85,1.4),Alpha=Math.Clamp(a.Alpha,0.65,1),Round=Math.Clamp(a.Round,0,26),BorderWidth=Math.Clamp(a.BorderWidth,0,4),CoverSize=Math.Clamp(a.CoverSize,40,64)};}catch{}ApplyAppearance();}
  void ApplyAppearance(){
   if(Content is not Border body)return;
-  bool dark=appearance.Theme is "Тёмная" or "Minecraft" or "Ночной океан" or "Лес" or "Терминал" or "Винил";bool pixel=appearance.Theme=="Minecraft";
+  bool dark=appearance.Theme is "Тёмная" or "Minecraft" or "Ночной океан" or "Лес" or "Терминал" or "Винил";
   string bg=appearance.Theme switch{"Тёмная"=>"#19212D","Minecraft"=>"#383D34","Ретро"=>"#E0DAC5","Лаванда"=>"#EBE5F5","Ночной океан"=>"#102C46","Лес"=>"#213E32","Кофе"=>"#3E2C26","Персик"=>"#FFE4D7","Терминал"=>"#0B1911",_=>"#F2F3F6"};
   var foreground=(Brush)new BrushConverter().ConvertFromString(dark?"#F1F3ED":"#354052")!;
   var accent=(Brush)new BrushConverter().ConvertFromString(appearance.Accent)!;
   Resources["AccentBrush"]=accent;body.Background=(Brush)new BrushConverter().ConvertFromString(bg)!;body.BorderBrush=(Brush)new BrushConverter().ConvertFromString(appearance.BorderColor??appearance.Accent)!;body.BorderThickness=new Thickness(appearance.BorderWidth);body.CornerRadius=new CornerRadius(appearance.Round);
   body.LayoutTransform=new ScaleTransform(appearance.Scale,appearance.Scale);body.Opacity=appearance.Alpha;
-  TextElement.SetFontFamily(body,new FontFamily(pixel||appearance.Theme is "Терминал" or "Карманный LCD"?"Consolas":"Segoe UI"));
   void Walk(DependencyObject node){
    if(node is TextBlock t)t.Foreground=foreground;
    if(node is CheckBox c)c.Foreground=foreground;
@@ -42,22 +40,21 @@ public sealed partial class Player
   }
   cover.Width=cover.Height=appearance.CoverSize;if(cover.Parent is Border art){art.Width=art.Height=appearance.CoverSize;}artist.Visibility=appearance.ShowArtist?Visibility.Visible:Visibility.Collapsed;timeLabel.Visibility=appearance.ShowTime?Visibility.Visible:Visibility.Collapsed;
   Walk(body);play.Background=accent;play.Foreground=Brushes.Black;
-  ApplyThemeVisuals(body);ApplyDeviceFace(body);UpdatePin();SetExpanded(expanded);
+  ApplyThemeVisuals(body);ApplyDeviceFace(body);UpdatePin();SizePlayer();
  }
  void Customize(bool preview=false){
   if(customizeWindow!=null){customizeWindow.Activate();return;}
   var original=appearance;
   bool saved=false, syncing=false;
   var ink=BrushOf("#292535");var muted=BrushOf("#645E71");var purple=BrushOf("#6544A0");
-  var w=new Window{Title="Mini Player · Оформление",Width=Math.Min(552,SystemParameters.WorkArea.Width),Height=Math.Min(692,SystemParameters.WorkArea.Height),WindowStartupLocation=WindowStartupLocation.CenterScreen,Topmost=true,Background=BrushOf("#F8F6FA"),Foreground=ink,FontFamily=new FontFamily("Segoe UI")};
+  var w=CreatePreferencesWindow("Оформление",692);
   customizeWindow=w;
   var shell=new DockPanel();w.Content=new Border{Background=w.Background,Padding=new Thickness(20,14,20,12),Child=shell};
   var header=new StackPanel();DockPanel.SetDock(header,Dock.Top);shell.Children.Add(header);
-  TextBlock Text(string value,double size,Brush color,bool bold=false)=>new(){Text=value,FontSize=size,Foreground=color,FontWeight=bold?FontWeights.SemiBold:FontWeights.Normal,TextWrapping=TextWrapping.Wrap};
-  header.Children.Add(Text("Оформление плеера",25,ink,true));
+  TextBlock Text(string value,double size,Brush color)=>new(){Text=value,FontSize=size,Foreground=color,TextWrapping=TextWrapping.Wrap};
+  header.Children.Add(Text("Оформление плеера",25,ink));
   header.Children.Add(Text("Изменения сразу видны в плеере.",13,muted));
-  var skin=(ControlTemplate)System.Windows.Markup.XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Name='Frame' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='1' CornerRadius='9' Padding='{TemplateBinding Padding}'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border><ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Frame' Property='BorderBrush' Value='#7653AD'/></Trigger><Trigger Property='IsPressed' Value='True'><Setter TargetName='Frame' Property='Opacity' Value='.78'/></Trigger></ControlTemplate.Triggers></ControlTemplate>");
-  Button Btn(object label)=>new(){Content=label,Template=skin,Background=Brushes.White,Foreground=ink,BorderBrush=BrushOf("#DDD8E4"),Padding=new Thickness(12,8,12,8),Cursor=System.Windows.Input.Cursors.Hand};
+  Button Btn(object label)=>PreferencesButton(label);
   void Mark(Button b,bool selected){b.Background=selected?BrushOf("#EEE7FA"):Brushes.White;b.BorderBrush=selected?purple:BrushOf("#DDD8E4");}
   var nav=new System.Windows.Controls.Primitives.UniformGrid{Rows=1,Margin=new Thickness(0,14,0,10)};header.Children.Add(nav);
   var footer=new DockPanel{Margin=new Thickness(0,12,0,0)};DockPanel.SetDock(footer,Dock.Bottom);shell.Children.Add(footer);
@@ -74,7 +71,7 @@ public sealed partial class Player
   for(int i=0;i<3;i++){int index=i;var b=tabs[i]=Btn(names[i]);b.Margin=new Thickness(2);nav.Children.Add(b);b.Click+=(_,_)=>Page(index);}
   var cards=new System.Collections.Generic.Dictionary<string,Button>();
   StackPanel Card(StackPanel parent,string heading){
-   var box=new StackPanel();box.Children.Add(Text(heading,17,ink,true));
+   var box=new StackPanel();box.Children.Add(Text(heading,17,ink));
    parent.Children.Add(new Border{Background=Brushes.White,CornerRadius=new CornerRadius(12),Padding=new Thickness(16),Margin=new Thickness(2,3,2,8),Child=box});return box;
   }
   var palette=Card(colors,"Палитра");var swatches=new System.Windows.Controls.Primitives.UniformGrid{Rows=1,Margin=new Thickness(0,12,0,10)};palette.Children.Add(swatches);
@@ -86,22 +83,24 @@ public sealed partial class Player
    var b=chips[i]=Btn(group);b.Margin=new Thickness(2);swatches.Children.Add(b);b.Tag=index;
   }
   var editor=new DockPanel();palette.Children.Add(editor);var wheel=new ColorWheel{Margin=new Thickness(0,4,16,2)};DockPanel.SetDock(wheel,Dock.Left);editor.Children.Add(wheel);
-  var values=new StackPanel{VerticalAlignment=VerticalAlignment.Center};editor.Children.Add(values);var code=Text("",15,ink,true);values.Children.Add(code);values.Children.Add(Text("Яркость",12,muted));var brightness=new Slider{Minimum=0,Maximum=1};values.Children.Add(brightness);
+  var values=new StackPanel{VerticalAlignment=VerticalAlignment.Center};editor.Children.Add(values);var code=Text("",15,ink);values.Children.Add(code);values.Children.Add(Text("Яркость",12,muted));var brightness=new Slider{Minimum=0,Maximum=1};values.Children.Add(brightness);
   brightness.ValueChanged+=(_,_)=>{if(!syncing){wheel.Value=brightness.Value;wheel.Publish();}};
   wheel.Changed+=hex=>{appearance=role switch{0=>appearance with{Accent=hex},1=>appearance with{BorderColor=hex},_=>appearance with{BackgroundColor=hex}};code.Text=hex;for(int i=0;i<3;i++)samples[i].Background=BrushOf(ColorAt(i));ApplyAppearance();};
   var form=Card(geometry,"Размер и форма");var updates=new System.Collections.Generic.List<Action>();
-  void Setting(string name,double min,double max,double step,Func<double> read,Action<double> write,bool percent=false,StackPanel? section=null,bool rebuild=true){
-   var line=new DockPanel{Margin=new Thickness(0,8,0,0)};(section??form).Children.Add(line);var val=Text("",12,purple,true);DockPanel.SetDock(val,Dock.Right);line.Children.Add(val);line.Children.Add(Text(name,13,ink));
-   var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true};(section??form).Children.Add(slider);
+  FrameworkElement Setting(string name,double min,double max,double step,Func<double> read,Action<double> write,bool percent=false,StackPanel? section=null,bool rebuild=true){
+   var group=new StackPanel();(section??form).Children.Add(group);
+   var line=new DockPanel{Margin=new Thickness(0,8,0,0)};group.Children.Add(line);var val=Text("",12,purple);DockPanel.SetDock(val,Dock.Right);line.Children.Add(val);line.Children.Add(Text(name,13,ink));
+   var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true};group.Children.Add(slider);
    System.Windows.Automation.AutomationProperties.SetName(slider,name);
    void Update(){val.Text=percent?$"{read()*100:0}%":$"{read():0} px";}
    updates.Add(()=>{slider.Value=read();Update();});slider.ValueChanged+=(_,_)=>{if(syncing)return;write(slider.Value);Update();if(rebuild)ApplyAppearance();};
+   return group;
   }
   Setting("Масштаб",.85,1.4,.05,()=>appearance.Scale,v=>appearance=appearance with{Scale=v},true);
   Setting("Непрозрачность",.65,1,.01,()=>appearance.Alpha,v=>appearance=appearance with{Alpha=v},true);
   Setting("Скругление углов",0,26,1,()=>appearance.Round,v=>appearance=appearance with{Round=v});
   Setting("Толщина рамки",0,4,1,()=>appearance.BorderWidth,v=>appearance=appearance with{BorderWidth=v});
-  Setting("Размер обложки",40,64,1,()=>appearance.CoverSize,v=>appearance=appearance with{CoverSize=v});
+  var coverSetting=Setting("Размер обложки",40,64,1,()=>appearance.CoverSize,v=>appearance=appearance with{CoverSize=v});
   var sound=Card(geometry,"Реакция на музыку");
   Setting("Чувствительность эквалайзера",0,3,.05,()=>appearance.Sensitivity,v=>appearance=appearance with{Sensitivity=v},true,sound,false);
   sound.Children.Add(Text("Кольца светлой темы и индикаторы в темах «Тёмная», Minecraft и «Терминал». При 0% реакция выключена.",12,muted));
@@ -110,13 +109,13 @@ public sealed partial class Player
   info.Children.Add(artistCheck);info.Children.Add(timeCheck);
   artistCheck.Click+=(_,_)=>{appearance=appearance with{ShowArtist=artistCheck.IsChecked==true};ApplyAppearance();};
   timeCheck.Click+=(_,_)=>{appearance=appearance with{ShowTime=timeCheck.IsChecked==true};ApplyAppearance();};
-  void Sync(){syncing=true;foreach(var pair in cards)Mark(pair.Value,pair.Key==appearance.Theme);for(int i=0;i<3;i++){samples[i].Background=BrushOf(ColorAt(i));Mark(chips[i],role==i);}code.Text=ColorAt(role);wheel.SetColor(code.Text);brightness.Value=wheel.Value;foreach(var action in updates)action();artistCheck.IsChecked=appearance.ShowArtist;timeCheck.IsChecked=appearance.ShowTime;syncing=false;}
+  void Sync(){syncing=true;foreach(var pair in cards)Mark(pair.Value,pair.Key==appearance.Theme);for(int i=0;i<3;i++){samples[i].Background=BrushOf(ColorAt(i));Mark(chips[i],role==i);}code.Text=ColorAt(role);wheel.SetColor(code.Text);brightness.Value=wheel.Value;foreach(var action in updates)action();coverSetting.Visibility=StudioFace.For(appearance.Theme).SceneIsBackground?Visibility.Collapsed:Visibility.Visible;artistCheck.IsChecked=appearance.ShowArtist;timeCheck.IsChecked=appearance.ShowTime;syncing=false;}
   foreach(var name in new[]{"Винил","Закат","Карманный LCD"}.Concat(Themes.Where(t=>t is not ("Винил" or "Закат" or "Карманный LCD")))){
    var content=new StackPanel();var img=new Image{Height=65,Stretch=Stretch.Uniform};
    using(var stream=typeof(Player).Assembly.GetManifestResourceStream("preview."+name+".png")){
     if(stream!=null){var bitmap=new System.Windows.Media.Imaging.BitmapImage();bitmap.BeginInit();bitmap.CacheOption=System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;bitmap.StreamSource=stream;bitmap.EndInit();bitmap.Freeze();img.Source=bitmap;}
    }
-   content.Children.Add(img);var label=Text(name,13,ink,true);label.HorizontalAlignment=HorizontalAlignment.Center;label.Margin=new Thickness(0,5,0,0);content.Children.Add(label);
+   content.Children.Add(img);var label=Text(name,13,ink);label.HorizontalAlignment=HorizontalAlignment.Center;label.Margin=new Thickness(0,5,0,0);content.Children.Add(label);
    var b=Btn(content);System.Windows.Automation.AutomationProperties.SetName(b,name);b.Margin=new Thickness(3);cards.Add(name,b);gallery.Children.Add(b);
    b.Click+=(_,_)=>{if(appearance.Theme==name)return;appearance=appearance with{Theme=name,Accent=ThemeAccent(name),BorderColor=ThemeAccent(name),BackgroundColor=null,Round=name=="Minecraft"?0:20,BorderWidth=name=="Minecraft"?3:1};Sync();ApplyAppearance();};
   }
