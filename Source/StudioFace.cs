@@ -140,17 +140,37 @@ sealed class SceneMotion:FrameworkElement{
   }
   return sprites;
  }
- void DrawLavender(DrawingContext d){
-  for(int row=0;row<9;row++){
-   double depth=row/8d,y=55+48*Math.Pow(depth,1.45);
-   double scale=.19+.88*depth,spacing=2.65+4.4*depth;
-   for(int col=-1;col*spacing<164;col++){
-    double x=(col+(row%2)*.5)*spacing;
-    double angle=8*Math.Sin(Phase*.82-x*.039-row*.21)+2*Math.Sin(Phase*1.17+x*.065);
-    double radians=angle*Math.PI/180,cs=scale*Math.Cos(radians),sn=scale*Math.Sin(radians);
-    d.PushTransform(new MatrixTransform(cs,sn,-sn,cs,x,y+.55*Math.Sin(col*2.3+row)));
-    d.DrawDrawing(LavenderSprigs[(col+1+row*2)%3]);d.Pop();
+ readonly record struct Sprig(double X,double Y,double Scale,double Lean,int Tint);
+ static readonly Sprig[] Field=PlantLavender();
+ static Sprig[] PlantLavender(){
+  var random=new Random(7103);
+  var plants=new System.Collections.Generic.List<Sprig>();
+  // Guarantee coverage locally, then scatter small clumps around each anchor.
+  for(int band=0;band<11;band++){
+   double near=band/11d,far=(band+1)/11d;
+   double top=55+52*Math.Pow(near,1.5),bottom=55+52*Math.Pow(far,1.5);
+   double cell=4+near*5;
+   double start=-cell*random.NextDouble()-2;
+   for(double left=start;left<163;left+=cell){
+    double x=left+cell*(.12+.76*random.NextDouble());
+    double y=top+(bottom-top)*random.NextDouble();
+    double size=(.20+.88*near)*(.84+.34*random.NextDouble());
+    int stems=random.NextDouble()<.45?1:random.Next(2,4);
+    for(int i=0;i<stems;i++){
+     double spread=(i-(stems-1)*.5)*size;
+     plants.Add(new Sprig(x+spread,y+size*random.NextDouble(),size*(.85+.30*random.NextDouble()),
+      spread*8+(random.NextDouble()-.5)*11,random.Next(3)));
+    }
    }
+  }
+  plants.Sort((a,b)=>a.Y.CompareTo(b.Y));return plants.ToArray();
+ }
+ void DrawLavender(DrawingContext d){
+  foreach(var plant in Field){
+   double angle=plant.Lean+8*Math.Sin(Phase*.82-plant.X*.039-plant.Y*.035)+2*Math.Sin(Phase*1.17+plant.X*.065);
+   double radians=angle*Math.PI/180,cs=plant.Scale*Math.Cos(radians),sn=plant.Scale*Math.Sin(radians);
+   d.PushTransform(new MatrixTransform(cs,sn,-sn,cs,plant.X,plant.Y));
+   d.DrawDrawing(LavenderSprigs[plant.Tint]);d.Pop();
   }
  }
  static SolidColorBrush TerrainBrush(byte r,byte g,byte b){var brush=new SolidColorBrush(Color.FromRgb(r,g,b));brush.Freeze();return brush;}
