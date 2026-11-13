@@ -49,7 +49,7 @@ public sealed partial class Player
   var original=appearance;
   bool saved=false, syncing=false;
   var ink=BrushOf("#292535");var muted=BrushOf("#645E71");var purple=BrushOf("#6544A0");
-  var w=new Window{Title="mini payer · Оформление",Width=Math.Min(552,SystemParameters.WorkArea.Width),Height=Math.Min(692,SystemParameters.WorkArea.Height),WindowStartupLocation=WindowStartupLocation.CenterScreen,Topmost=true,Background=BrushOf("#F8F6FA"),Foreground=ink,FontFamily=new FontFamily("Segoe UI")};
+  var w=new Window{Title="Mini Player · Оформление",Width=Math.Min(552,SystemParameters.WorkArea.Width),Height=Math.Min(692,SystemParameters.WorkArea.Height),WindowStartupLocation=WindowStartupLocation.CenterScreen,Topmost=true,Background=BrushOf("#F8F6FA"),Foreground=ink,FontFamily=new FontFamily("Segoe UI")};
   customizeWindow=w;
   var shell=new DockPanel();w.Content=new Border{Background=w.Background,Padding=new Thickness(20,14,20,12),Child=shell};
   var header=new StackPanel();DockPanel.SetDock(header,Dock.Top);shell.Children.Add(header);
