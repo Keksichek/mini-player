@@ -233,7 +233,10 @@ public sealed partial class Player
   meter.MouseLeftButtonUp+=async(_,e)=>{if(!meter.IsMouseCaptured)return;Locate(e);meter.ReleaseMouseCapture();e.Handled=true;await Seek();};
   meter.LostMouseCapture+=(_,_)=>seeking=false;
   meter.KeyDown+=async(_,e)=>{if(!seek.IsEnabled||e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right))return;seekTrack=track;seek.Value+=e.Key==System.Windows.Input.Key.Left?-5:5;e.Handled=true;await Seek();};
-  facePin=Key(studio!=null?studio.Width-112:vinyl?216:sun?211:137,studio!=null?2:vinyl?86:sun?4:92,sun?70:80,lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
+  var pinPosition=studio!=null
+   ? (appearance.Theme=="Лаванда"?new Point(studio.Width-84,studio.Height-23):new Point(studio.Width-112,2))
+   : new Point(vinyl?216:sun?211:137,vinyl?86:sun?4:92);
+  facePin=Key(pinPosition.X,pinPosition.Y,sun?70:80,lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
   var more=Key(studio!=null?studio.Width-28:vinyl?252:sun?286:198,studio!=null?2:vinyl?56:sun?4:10,26,22,"⋯","Меню плеера",vinyl?metal:B("#EAE3DB"));
   face.ContextMenu=AttachPlayerMenu(more);
 
