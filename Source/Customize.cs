@@ -104,7 +104,7 @@ public sealed partial class Player
   Setting("Размер обложки",40,64,1,()=>appearance.CoverSize,v=>appearance=appearance with{CoverSize=v});
   var sound=Card(geometry,"Реакция на музыку");
   Setting("Чувствительность эквалайзера",0,3,.05,()=>appearance.Sensitivity,v=>appearance=appearance with{Sensitivity=v},true,sound,false);
-  sound.Children.Add(Text("Кольца светлой темы и индикаторы в тёмной теме и Minecraft. При 0% реакция выключена.",12,muted));
+  sound.Children.Add(Text("Кольца светлой темы и индикаторы в темах «Тёмная», Minecraft и «Терминал». При 0% реакция выключена.",12,muted));
   var info=Card(geometry,"Информация о треке");
   var artistCheck=new CheckBox{Content="Исполнитель",Margin=new Thickness(0,8,0,0)};var timeCheck=new CheckBox{Content="Время трека",Margin=new Thickness(0,6,0,0)};
   info.Children.Add(artistCheck);info.Children.Add(timeCheck);

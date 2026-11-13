@@ -15,7 +15,7 @@ sealed record StudioFace(int Width,int Height,string Paper,string Ink,string Key
   "Ночной океан"=>new(364,169,"#10283D","#E5F1FA","#9ABACD","Georgia",new(193,0,171,169),new(8,38),178,new(199,34),new(7,99),new(7,137,181,14),new(9,151),47,20),
   "Персик"=>new(318,192,"#FFEBDA","#62332B","#FFD0AA","Segoe UI",new(174,32,144,109),new(9,42),162,new(5,77),new(76,145),new(79,103,91,15),new(81,123),45,16),
   "Ретро"=>new(322,205,"#DDCEAA","#413B32","#B8ADA1","Consolas",new(15,14,168,105),new(9,123),296,new(216,37),new(136,177),new(9,163,301,10),new(5,183),53,3),
-  "Терминал"=>new(284,205,"#273431","#BFECC1","#B5C2AC","Consolas",new(0,28,284,112),new(18,46),193,new(209,48),new(15,160),new(17,92,180,18),new(19,116),58,3),
+  "Терминал"=>new(284,205,"#273431","#BFECC1","#B5C2AC","Consolas",new(0,28,284,112),new(18,46),193,new(209,48),new(51,160),new(17,92,180,18),new(19,116),58,3),
   "Стекло"=>new(337,164,"#CBE4EF","#193D55","#EDF8FC","Segoe UI",new(0,28,126,128),new(128,42),202,new(18,54),new(128,101),new(128,138,193,15),new(4,140),47,22),
   "Тёмная"=>new(339,162,"#191A20","#F6EFE9","#BCBAC6","Segoe UI",new(115,74,215,43),new(115,33),215,new(7,18),new(7,128),new(178,128,150,15),new(258,147),49,5),
   _=>new(351,143,"#F9F7F0","#252831","#E6E4DC","Georgia",new(0,0,119,143),new(128,35),211,new(19,34),new(129,83),new(130,120,146,14),new(279,121),44,21)
@@ -69,7 +69,7 @@ break;
     Rect(62,46,36,15,B("#906347"),2);P("M29,100 L35,83 H125 L132,100Z","#71645A");break;
    case "Терминал":
     Rect(0,0,160,100,B("#4D554C"),6);Rect(3,4,154,92,G("#111E19","#263B2D"),5);
-    for(int i=0;i<7;i++)Rect(122+i*4,81-rnd.Next(5),2,8,B("#668D6B"));break;
+    break;
    case "Стекло":
     Rect(0,0,160,100,G("#8FAFCB","#EEF8F7",40),14);
     foreach(var (x,y,r) in new[]{(37,29,26),(108,68,39),(137,18,17)}){E(x,y,r,r,G("#ECFEFD","#91B8D7",55));E(x-r*.29,y-r*.4,r*.19,r*.09,B("#E6F7FF"));}break;
@@ -88,7 +88,7 @@ break;
 sealed class SceneMotion:FrameworkElement{
  readonly string theme;
  public double Phase;
- public bool UsesAudio=>theme is "Светлая" or "Тёмная" or "Minecraft";
+ public bool UsesAudio=>theme is "Терминал" or "Светлая" or "Тёмная" or "Minecraft";
  public double CoverRadius {get;set;}
  double pulse;
  static readonly Pen Ring=new(new SolidColorBrush(Color.FromRgb(173,169,158)),1);
@@ -114,6 +114,27 @@ sealed class SceneMotion:FrameworkElement{
   double blend=1-Math.Exp(-elapsed/.055);
   for(int i=0;i<darkHeights.Length;i++)darkHeights[i]+=(darkPeaks[i]-darkHeights[i])*blend;
  }
+ readonly double[] terminalBars=new double[7];
+ static readonly string[] TerminalCode={"0x1A","[buf]","01 10","0xFF"};
+ Geometry[]? terminalGlyphs;
+ public void AdvanceTerminal(double dt){
+  double blend=1-Math.Exp(-Math.Max(0,dt)/.095);
+  for(int i=0;i<7;i++)terminalBars[i]+=(history[history.Length-7+i]-terminalBars[i])*blend;
+ }
+ void DrawTerminal(DrawingContext d){
+  terminalGlyphs??=Array.ConvertAll(TerminalCode,code=>new FormattedText(code,
+   System.Globalization.CultureInfo.InvariantCulture,FlowDirection.LeftToRight,new Typeface("Consolas"),
+   5.5,Brushes.White,VisualTreeHelper.GetDpi(this).PixelsPerDip).BuildGeometry(new Point()));
+  for(int i=0;i<terminalGlyphs.Length;i++){
+   d.PushOpacity(.12+.07*Math.Sin(Phase*.62+i*1.7));d.PushTransform(new TranslateTransform(10+i*27,7));
+   d.DrawGeometry(Lamp,null,terminalGlyphs[i]);d.Pop();d.Pop();
+  }
+  for(int i=0;i<7;i++){
+   double h=2+15*terminalBars[i];
+   d.DrawRoundedRectangle(TerminalPhosphor,null,new Rect(121+i*4,89-h,2.4,h),.45,.45);
+  }
+ }
+ static readonly Brush TerminalPhosphor=TerrainBrush(155,203,150);
  public void Sample(float level,double sensitivity){
   float strength=(float)Math.Min(1,Math.Sqrt(level)*sensitivity);
   if(theme=="Светлая"){pulse+=(strength-pulse)*(strength>pulse?.85:.24);return;}
@@ -122,7 +143,7 @@ sealed class SceneMotion:FrameworkElement{
   }
   Array.Copy(history,1,history,0,history.Length-1);history[^1]=strength;
  }
- public void Silence(){previousFrame=-1;columnFraction=0;Array.Clear(darkPeaks);Array.Clear(darkHeights);pulse=0;Array.Clear(history);InvalidateVisual();}
+ public void Silence(){Array.Clear(terminalBars);previousFrame=-1;columnFraction=0;Array.Clear(darkPeaks);Array.Clear(darkHeights);pulse=0;Array.Clear(history);InvalidateVisual();}
  static readonly Pen Water=new(new SolidColorBrush(Color.FromArgb(196,227,201,156)),.85);
  static readonly Pen Stem=new(new SolidColorBrush(Color.FromRgb(104,113,83)),.8);
  static readonly DrawingGroup[] LavenderSprigs=CreateSprigs();
@@ -274,6 +295,7 @@ sealed class SceneMotion:FrameworkElement{
   }else if(theme=="Персик"){
    for(int i=0;i<3;i++){double a=Phase*.8+i*2;d.PushOpacity(.18+.13*Math.Sin(a));d.DrawEllipse(Brushes.White,null,new Point(100+i*5+Math.Cos(a)*1.4,41+i*3),1.7,1);d.Pop();}
   }else if(theme=="Терминал"){
+   DrawTerminal(d);
    d.PushOpacity(.25+.75*(.5+.5*Math.Cos(Phase*3)));d.DrawRectangle(Lamp,null,new Rect(62,84,5,2));d.Pop();
   }
   d.Pop();

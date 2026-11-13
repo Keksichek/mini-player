@@ -72,6 +72,7 @@ public sealed partial class Player
     var source=session?.SourceAppUserModelId??"";
     sceneMotion.Sample(peakReader.Read(audioSource==source?audioTarget:"",source),appearance.Sensitivity);lastSample=seconds;
    }
+   if(appearance.Theme=="Терминал")sceneMotion.AdvanceTerminal(seconds-sceneMotion.Phase);
    sceneMotion.Phase=seconds;sceneMotion.InvalidateVisual();}
   if(platterRotation!=null)platterRotation.Angle=seconds*45%360;
   else if(activeMeter!=null&&activeMeter.Animated){activeMeter.Phase=seconds*2;activeMeter.InvalidateVisual();}
