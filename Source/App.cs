@@ -14,13 +14,13 @@ using Windows.Storage.Streams;
 using WButton = System.Windows.Controls.Button;
 using WApplication = System.Windows.Application;
 
-namespace YandexMiniPlayer;
+namespace MiniPlayer;
 public sealed partial class Player : Window
 {
  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hwnd);
  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
  Button? pinButton;
- readonly TextBlock title=new(){Text="Включите трек в Яндекс Музыке",FontSize=13,FontWeight=FontWeights.SemiBold,TextTrimming=TextTrimming.CharacterEllipsis};
+ readonly TextBlock title=new(){Text="Включите музыку или видео",FontSize=13,FontWeight=FontWeights.SemiBold,TextTrimming=TextTrimming.CharacterEllipsis};
  readonly TextBlock artist=new(){Text="Ожидание подключения…",FontSize=12,Foreground=Brushes.LightSlateGray,TextTrimming=TextTrimming.CharacterEllipsis};
  readonly TextBlock status=new(){Text="",FontSize=10,Foreground=Brushes.LightSlateGray,TextWrapping=TextWrapping.Wrap};
  readonly System.Windows.Controls.Image cover=new(){Width=52,Height=52,Stretch=Stretch.UniformToFill};
@@ -35,7 +35,7 @@ public sealed partial class Player : Window
  GlobalSystemMediaTransportControlsSession? session;
  List<GlobalSystemMediaTransportControlsSession> sessions=new();
  bool refreshing,busy,closing,shownByUser=false; string track="";
- readonly string settingsPath=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"YandexMiniPlayer","settings.json");
+ readonly string settingsPath=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MiniPlayer","settings.json");
  record Settings(double X,double Y,bool Pin,bool Auto,string Source);
  string preferred="";
  readonly Slider volumeSlider=new(){Minimum=0,Maximum=100,Width=130,Height=22,IsMoveToPointEnabled=true};
@@ -54,7 +54,7 @@ public sealed partial class Player : Window
  void SetExpanded(bool value){expanded=value;details.Visibility=value?Visibility.Visible:Visibility.Collapsed;Width=(deviceFace!=null?Math.Max(deviceFace.Width+16+2*appearance.BorderWidth,value?350:0):value?350:300)*appearance.Scale;Height=(deviceFace!=null?deviceFace.Height+16+2*appearance.BorderWidth+(value?216:0):value?350:144)*appearance.Scale;Top=Math.Min(Top,SystemParameters.WorkArea.Bottom-Height);}
  async Task Seek(){
   if(session==null||!seek.IsEnabled||seekTrack!=track)return;
-  try{if(!await session.TryChangePlaybackPositionAsync(TimeSpan.FromSeconds(seek.Value).Ticks))status.Text="Яндекс Музыка отклонила перемотку.";}catch{status.Text="Перемотка недоступна.";}
+  try{if(!await session.TryChangePlaybackPositionAsync(TimeSpan.FromSeconds(seek.Value).Ticks))status.Text="Источник отклонил перемотку.";}catch{status.Text="Перемотка недоступна.";}
  }
  public Player()
  {
@@ -110,7 +110,7 @@ public sealed partial class Player : Window
   motionTimer.Tick+=(_,_)=>RenderMotion();
   IsVisibleChanged+=(_,_)=>SyncMotion();
   Closing+=(_,_)=>{peakReader.Dispose();motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
-  Loaded+=async(_,_)=>{LoadSettings();LoadAppearance();try{manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();await Refresh();timer.Start();}catch(Exception ex){status.Text="Нет доступа к медиасессиям Windows: "+ex.Message;}};
+  Loaded+=async(_,_)=>{ImportLegacySettings();LoadSettings();LoadAppearance();try{manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();await Refresh();timer.Start();}catch(Exception ex){status.Text="Нет доступа к медиасессиям Windows: "+ex.Message;}};
   timer.Tick+=async(_,_)=>await Refresh();
  }
  static WButton Button(string label,Action? action=null){var b=new WButton{Content=label,MinWidth=30,Height=26,Padding=new Thickness(5,0,5,0)};if(action!=null)b.Click+=(_,_)=>action();return b;}
@@ -141,7 +141,7 @@ public sealed partial class Player : Window
  if(!entries.Any(e=>e.Name==audioTarget))audioTarget=Audio.Match(source,entries)??"";
  if(!entries.Select(e=>e.Name).SequenceEqual(audioTargets.Items.Cast<string>())){audioTargets.Items.Clear();foreach(var entry in entries)audioTargets.Items.Add(entry.Name);}
  audioTargets.SelectedItem=audioTarget;var selectedAudio=entries.FirstOrDefault(e=>e.Name==audioTarget);
- volumeSlider.IsEnabled=selectedAudio!=null;audioHint.Text=selectedAudio!=null?"":entries.Count==0?"Включите звук в Яндекс Музыке, чтобы она появилась в микшере.":"Выберите приложение для регулировки громкости.";if(selectedAudio!=null){volumeSlider.Value=selectedAudio.Volume;volumeLabel.Text=$"{selectedAudio.Volume:0}%";}else volumeLabel.Text="—";
+ volumeSlider.IsEnabled=selectedAudio!=null;audioHint.Text=selectedAudio!=null?"":entries.Count==0?"Включите звук в приложении, чтобы оно появилось в микшере.":"Выберите приложение для регулировки громкости.";if(selectedAudio!=null){volumeSlider.Value=selectedAudio.Volume;volumeLabel.Text=$"{selectedAudio.Volume:0}%";}else volumeLabel.Text="—";
  }catch{audioHint.Text="Микшер Windows недоступен.";volumeSlider.IsEnabled=false;volumeLabel.Text="—";}finally{volumeSync=false;}}
    var list=manager.GetSessions().ToList();
    if(!list.SequenceEqual(sessions)){
@@ -152,7 +152,7 @@ public sealed partial class Player : Window
     if(index<0)index=sessions.FindIndex(s=>s.SourceAppUserModelId.Contains("yandex",StringComparison.OrdinalIgnoreCase)&&s.SourceAppUserModelId.Contains("music",StringComparison.OrdinalIgnoreCase));
     sources.SelectedIndex=index;session=index>=0?sessions[index]:null;track="";refreshing=false;
    }
-   if(session==null){SetMediaPlaying(false);title.Text="Включите Яндекс Музыку";artist.Text="Источник: ⋯ → список приложений";cover.Source=null;seek.IsEnabled=false;prev.IsEnabled=play.IsEnabled=next.IsEnabled=false;return;}
+   if(session==null){SetMediaPlaying(false);title.Text="Включите музыку или видео";artist.Text="Источник: ⋯ → список приложений";cover.Source=null;seek.IsEnabled=false;prev.IsEnabled=play.IsEnabled=next.IsEnabled=false;return;}
    var playback=session.GetPlaybackInfo();SetMediaPlaying(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);play.Content=mediaPlaying?"Ⅱ":"▶";
    prev.IsEnabled=playback.Controls.IsPreviousEnabled;next.IsEnabled=playback.Controls.IsNextEnabled;
    play.IsEnabled=playback.Controls.IsPlayPauseToggleEnabled||(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing?playback.Controls.IsPauseEnabled:playback.Controls.IsPlayEnabled);
@@ -160,7 +160,7 @@ public sealed partial class Player : Window
    var timeline=session.GetTimelineProperties();
    if(!seeking){updatingSeek=true;seek.Minimum=Math.Max(0,timeline.MinSeekTime.TotalSeconds);seek.Maximum=Math.Max(seek.Minimum+1,timeline.MaxSeekTime.TotalSeconds>0?timeline.MaxSeekTime.TotalSeconds:timeline.EndTime.TotalSeconds);seek.IsEnabled=playback.Controls.IsPlaybackPositionEnabled&&timeline.EndTime>TimeSpan.Zero;seek.Value=Math.Clamp(timeline.Position.TotalSeconds,seek.Minimum,seek.Maximum);timeLabel.Text=$"{TimeSpan.FromSeconds(seek.Value):m\\:ss} / {timeline.EndTime:m\\:ss}";updatingSeek=false;}
    var requestedSession=session;var media=await requestedSession.TryGetMediaPropertiesAsync();if(!Equals(requestedSession,session))return;var key=session.SourceAppUserModelId+"|"+media.Title+"|"+media.Artist;
-   title.Text=string.IsNullOrEmpty(media.Title)?"Яндекс Музыка":media.Title;artist.Text=media.Artist;
+   title.Text=string.IsNullOrEmpty(media.Title)?"Без названия":media.Title;artist.Text=media.Artist;
    if(key!=track){track=key;cover.Source=null;if(media.Thumbnail!=null){using var stream=await media.Thumbnail.OpenReadAsync();if(stream.Size<=8*1024*1024){using var reader=new DataReader(stream);await reader.LoadAsync((uint)stream.Size);var data=new byte[(int)stream.Size];reader.ReadBytes(data);using var memory=new System.IO.MemoryStream(data);var bitmap=new BitmapImage();bitmap.BeginInit();bitmap.CacheOption=BitmapCacheOption.OnLoad;bitmap.DecodePixelWidth=152;bitmap.StreamSource=memory;bitmap.EndInit();bitmap.Freeze();cover.Source=bitmap;}}}
    status.Text=Topmost?"Закреплён поверх окон":"Закрепление выключено";
    if(auto.IsChecked==true&&!shownByUser&&session.SourceAppUserModelId.Contains("yandex",StringComparison.OrdinalIgnoreCase)&&session.SourceAppUserModelId.Contains("music",StringComparison.OrdinalIgnoreCase)){
@@ -170,9 +170,20 @@ public sealed partial class Player : Window
     if(windows.Length>0){if(windows.All(h=>IsIconic(h)||!IsWindowVisible(h)))Show();else Hide();}
     else status.Text="Автопоказ: окно Яндекс Музыки не найдено";
    }
-  }catch{SetMediaPlaying(false);status.Text="Ожидание Яндекс Музыки…";}finally{busy=false;refreshing=false;}
+  }catch{SetMediaPlaying(false);status.Text="Ожидание медиаисточника…";}finally{busy=false;refreshing=false;}
  }
  void Save(){try{System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(settingsPath)!);System.IO.File.WriteAllText(settingsPath,System.Text.Json.JsonSerializer.Serialize(new Settings(Left,Top,Topmost,auto.IsChecked==true,preferred)));}catch{}}
+ void ImportLegacySettings(){
+  var target=System.IO.Path.GetDirectoryName(settingsPath)!;
+  var legacy=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(target)!,"YandexMiniPlayer");
+  foreach(var name in new[]{"settings.json","appearance.json"}){
+   var oldFile=System.IO.Path.Combine(legacy,name);var newFile=System.IO.Path.Combine(target,name);
+   if(System.IO.File.Exists(oldFile)&&!System.IO.File.Exists(newFile)){
+    try{System.IO.Directory.CreateDirectory(target);System.IO.File.Copy(oldFile,newFile);}
+    catch(System.IO.IOException){}catch(UnauthorizedAccessException){}
+   }
+  }
+ }
  void LoadSettings(){try{var s=System.Text.Json.JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(settingsPath));if(s!=null){Left=Math.Clamp(s.X,SystemParameters.VirtualScreenLeft,SystemParameters.VirtualScreenLeft+SystemParameters.VirtualScreenWidth-Width);Top=Math.Clamp(s.Y,SystemParameters.VirtualScreenTop,SystemParameters.VirtualScreenTop+SystemParameters.VirtualScreenHeight-Height);Topmost=s.Pin;preferred=s.Source;auto.IsChecked=s.Auto;}}catch{} }
  [STAThread] public static void Main(string[] args){
   if(args.Length==2&&args[0]=="--self-test"){
@@ -211,6 +222,6 @@ public sealed partial class Player : Window
    if(args[1].Contains("custom")){player.Customize(true);root=(FrameworkElement)player.customizeWindow!.Content;player.Width=player.customizeWindow.Width;player.Height=player.customizeWindow.Height;root.Measure(new Size(player.Width,player.Height));root.Arrange(new Rect(0,0,player.Width,player.Height));root.UpdateLayout();}
    var image=new RenderTargetBitmap((int)player.Width,(int)player.Height,96,96,PixelFormats.Pbgra32);image.Render(root);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=System.IO.File.Create(args[1]))encoder.Save(file);player.tray.Dispose();return;
   }
-  using var mutex=new System.Threading.Mutex(true,"Local\\YandexMiniPlayer",out var created);if(!created)return;var application=new WApplication();application.Run(new Player());
+  using var mutex=new System.Threading.Mutex(true,"Local\\MiniPlayer",out var created);if(!created)return;var application=new WApplication();application.Run(new Player());
  }
 }

@@ -8,7 +8,7 @@ using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Shapes;
 
-namespace YandexMiniPlayer;
+namespace MiniPlayer;
 public sealed partial class Player
 {
  Canvas? deviceFace;

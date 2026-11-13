@@ -1,2 +1,2 @@
 @echo off
-start "" "%~dp0App\YandexMiniPlayer.exe"
+start "" "%~dp0App\MiniPlayer.exe"

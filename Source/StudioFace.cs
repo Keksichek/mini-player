@@ -2,7 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Media;
 
-namespace YandexMiniPlayer;
+namespace MiniPlayer;
 
 // Coordinates refer to the compact face, in device-independent pixels.
 sealed record StudioFace(int Width,int Height,string Paper,string Ink,string Key,string Font,

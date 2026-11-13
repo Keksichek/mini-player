@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-namespace YandexMiniPlayer;
+namespace MiniPlayer;
 sealed class ColorWheel : FrameworkElement
 {
  const int N=110;static readonly BitmapSource bitmap=Create();double hue,saturation;public double Value=1;

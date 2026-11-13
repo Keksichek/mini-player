@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Markup;
 using System.Windows.Media;
-namespace YandexMiniPlayer;
+namespace MiniPlayer;
 public sealed partial class Player
 {
  static Brush BrushOf(string color)=>(Brush)new BrushConverter().ConvertFromString(color)!;

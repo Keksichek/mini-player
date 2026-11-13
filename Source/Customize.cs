@@ -6,7 +6,7 @@ using System.Windows.Documents;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Text.Json;
-namespace YandexMiniPlayer;
+namespace MiniPlayer;
 public sealed partial class Player
 {
  record Appearance(string Theme="Светлая",string Accent="#7FA6D9",double Scale=1,double Alpha=1,string? BorderColor=null,double Round=20,double BorderWidth=1,double CoverSize=52,bool ShowArtist=true,bool ShowTime=true,string? BackgroundColor=null,double Sensitivity=1);

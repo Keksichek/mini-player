@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
-namespace YandexMiniPlayer;
+namespace MiniPlayer;
 static class Audio {
  public record Entry(string Name,double Volume);
  [ComImport,Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class Enumerator {}

@@ -6,12 +6,12 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v10.0": {
-      "YandexMiniPlayer/1.0.0": {
+      "MiniPlayer/1.0.0": {
         "dependencies": {
           "runtimepack.Microsoft.Windows.SDK.NET.Ref": "10.0.19041.57"
         },
         "runtime": {
-          "YandexMiniPlayer.dll": {}
+          "MiniPlayer.dll": {}
         }
       },
       "runtimepack.Microsoft.Windows.SDK.NET.Ref/10.0.19041.57": {
@@ -29,7 +29,7 @@
     }
   },
   "libraries": {
-    "YandexMiniPlayer/1.0.0": {
+    "MiniPlayer/1.0.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
