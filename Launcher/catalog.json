@@ -1,0 +1,11 @@
+[
+  {
+    "Id": "mini-player",
+    "Name": "Мини-плеер",
+    "Description": "Музыка всегда под рукой. Управление треками, громкостью и оформлением прямо на рабочем столе.",
+    "Version": "1.0.0",
+    "Package": "mini-player.zip",
+    "Executable": "App/MiniPlayer.exe",
+    "Available": true
+  }
+]

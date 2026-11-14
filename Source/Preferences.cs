@@ -85,7 +85,7 @@ public sealed partial class Player
   auto.Foreground=ink;auto.FontSize=13;behavior.Children.Add(auto);
   behavior.Children.Add(new TextBlock{Text="Автопоказ при сворачивании Яндекс Музыки.",FontSize=12,Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
   var hotkeys=Section("Горячие клавиши");hotkeys.Children.Add(BuildHotkeySettings());
-  var uninstall=PreferencesButton(new TextBlock{Text="Удалить приложение полностью",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center});
+  var uninstall=PreferencesButton(new TextBlock{Text=LaunchContext.LauncherRoot==null?"Удалить приложение полностью":"Удалить виджет через лаунчер",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center});
   uninstall.Foreground=BrushOf("#B4232B");uninstall.Background=BrushOf("#FFF5F5");uninstall.BorderBrush=BrushOf("#F1CBCB");
   uninstall.FontSize=13;uninstall.Margin=new Thickness(2,3,2,8);uninstall.Padding=new Thickness(12,10,12,10);
   uninstall.Click+=(_,_)=>ConfirmUninstall();sections.Children.Add(uninstall);

@@ -58,6 +58,14 @@ public sealed partial class Player
 
  async void ConfirmUninstall(){
   if(uninstalling)return;
+  if(LaunchContext.LauncherRoot!=null){
+   try{
+    var start=new ProcessStartInfo(Path.Combine(LaunchContext.LauncherRoot,"Launcher.exe")){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=LaunchContext.LauncherRoot};
+    start.ArgumentList.Add("--remove-widget");start.ArgumentList.Add("mini-player");
+    Process.Start(start)?.Dispose();
+   }catch(Exception ex){MessageBox.Show(settingsWindow??this,"Не удалось открыть лаунчер.\n\n"+ex.Message,"Удаление виджета",MessageBoxButton.OK,MessageBoxImage.Error);}
+   return;
+  }
   var owner=settingsWindow??this;
   string? taskDirectory=null;
   try{

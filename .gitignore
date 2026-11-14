@@ -7,3 +7,5 @@
 *.user
 settings.json
 appearance.json
+.build/
+dist/

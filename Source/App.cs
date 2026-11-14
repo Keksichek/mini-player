@@ -55,7 +55,7 @@ public sealed partial class Player : Window
  GlobalSystemMediaTransportControlsSession? session;
  List<GlobalSystemMediaTransportControlsSession> sessions=new();
  bool refreshing,busy,closing,shownByUser=false; string track="";
- readonly string settingsPath=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"MiniPlayer","settings.json");
+ readonly string settingsPath=System.IO.Path.Combine(LaunchContext.DataDirectory,"settings.json");
  record Settings(double X,double Y,bool Pin,bool Auto,string Source,string AudioTarget="",string AudioSource="");
  string preferred="";
  readonly Slider volumeSlider=new(){Minimum=0,Maximum=100,Height=28,IsMoveToPointEnabled=true,IsEnabled=false};
@@ -260,6 +260,6 @@ public sealed partial class Player : Window
    }
    var image=new RenderTargetBitmap((int)player.Width,(int)player.Height,96,96,PixelFormats.Pbgra32);image.Render(root);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));using(var file=System.IO.File.Create(args[1]))encoder.Save(file);player.tray.Dispose();return;
   }
-  using var mutex=new System.Threading.Mutex(true,"Local\\MiniPlayer",out var created);if(!created)return;var application=new PlayerApplication();application.Run(new Player());
+  RunInteractive(args);
  }
 }
