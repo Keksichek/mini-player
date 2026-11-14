@@ -140,7 +140,8 @@ public sealed partial class Player : Window
   motionTimer.Tick+=(_,_)=>RenderMotion();
   IsVisibleChanged+=(_,_)=>{SyncMotion();UpdateRecoveryArrow();};
   LocationChanged+=(_,_)=>UpdateRecoveryArrow();SizeChanged+=(_,_)=>UpdateRecoveryArrow();
-  Closing+=(_,_)=>{closing=true;recoveryWindow?.Close();settingsWindow?.Close();customizeWindow?.Close();peakReader.Dispose();motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
+  SourceInitialized+=(_,_)=>InitializeHotkeys();
+  Closing+=(_,_)=>{closing=true;DisposeHotkeys();recoveryWindow?.Close();settingsWindow?.Close();customizeWindow?.Close();peakReader.Dispose();motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
   Loaded+=async(_,_)=>{ImportLegacySettings();LoadSettings();LoadAppearance();UpdateRecoveryArrow();timer.Start();try{manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();await Refresh();}catch(Exception ex){status.Text="Нет доступа к медиасессиям Windows: "+ex.Message;}};
   timer.Tick+=async(_,_)=>{UpdateRecoveryArrow();await Refresh();};
  }
@@ -151,6 +152,13 @@ public sealed partial class Player : Window
    bool ok;
    if(command==0)ok=await selected.TrySkipPreviousAsync();
    else if(command==2)ok=await selected.TrySkipNextAsync();
+   else if(command is 3 or 4){
+    var info=selected.GetPlaybackInfo();bool wantPlaying=command==4;
+    bool isPlaying=info.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+    if(wantPlaying==isPlaying)return;
+    ok=wantPlaying?await selected.TryPlayAsync():await selected.TryPauseAsync();
+    if(!ok&&info.Controls.IsPlayPauseToggleEnabled)ok=await selected.TryTogglePlayPauseAsync();
+   }
    else{
     var info=selected.GetPlaybackInfo();
     if(info.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing&&info.Controls.IsPauseEnabled)ok=await selected.TryPauseAsync();
