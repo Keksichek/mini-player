@@ -146,6 +146,16 @@ public sealed class WidgetManager
  {
   if(!IsInstalled(widget))throw new InvalidOperationException("Сначала установите виджет.");
   RejectLinks(WidgetDirectory(widget));RejectLinks(DataDirectory(widget));
+  if(IsRunning(widget)){
+   string command=mode=="--settings"?".Settings":mode=="--customize"?".Customize":".Show";
+   for(int i=0;i<100&&IsRunning(widget);i++){
+    bool loaded=true;
+    if(EventWaitHandle.TryOpenExisting(InstanceName(widget)+".Ready",out var ready)){using(ready)loaded=ready.WaitOne(0);}
+    if(loaded&&EventWaitHandle.TryOpenExisting(InstanceName(widget)+command,out var signal)){using(signal)signal.Set();return;}
+    await Task.Delay(100).ConfigureAwait(false);
+   }
+   if(IsRunning(widget))throw new IOException("Виджет ещё запускается. Подождите несколько секунд и повторите действие.");
+  }
   var runtime=Path.Combine(root,"Runtime","dotnet.exe");
   if(!File.Exists(runtime))throw new FileNotFoundException("Не хватает компонентов запуска. Переустановите лаунчер.");
   var executable=Executable(widget);var dll=Path.ChangeExtension(executable,".dll");
@@ -157,15 +167,31 @@ public sealed class WidgetManager
   start.ArgumentList.Add("--show-existing");
   if(mode!=null)start.ArgumentList.Add(mode);
   using var process=Process.Start(start)??throw new IOException("Не удалось запустить виджет.");
-  await Task.Delay(650).ConfigureAwait(false);
-  if(process.HasExited&&(process.ExitCode!=0||!IsRunning(widget)))throw new IOException("Виджет не смог запуститься. Попробуйте удалить и установить его заново.");
+  var startup=Stopwatch.StartNew();
+  while(startup.Elapsed<TimeSpan.FromSeconds(10)){
+   bool running=IsRunning(widget);
+   if(process.HasExited&&(process.ExitCode!=0||!running))throw new IOException("Виджет не смог запуститься. Попробуйте удалить и установить его заново.");
+   if(running){
+    if(EventWaitHandle.TryOpenExisting(InstanceName(widget)+".Ready",out var ready)){
+     using(ready)if(ready.WaitOne(0))return;
+    }else if(startup.ElapsedMilliseconds>=650&&EventWaitHandle.TryOpenExisting(InstanceName(widget)+".Show",out var legacyReady)){
+     // Installed older widgets remain usable until the user reinstalls their package.
+     using(legacyReady)return;
+    }
+   }
+   await Task.Delay(100).ConfigureAwait(false);
+  }
+  throw new IOException("Виджет ещё запускается. Подождите несколько секунд и нажмите «Показать».");
  }
  public async Task StopAsync(Widget widget)
  {
-  if(!IsRunning(widget))return;
-  if(!EventWaitHandle.TryOpenExisting(InstanceName(widget)+".Stop",out var stop))throw new IOException("Закройте виджет через его значок возле часов и повторите действие.");
-  using(stop)stop.Set();
-  for(int i=0;i<60;i++){await Task.Delay(100);if(!IsRunning(widget))return;}
+  bool sent=false;
+  for(int i=0;i<100;i++){
+   if(!IsRunning(widget))return;
+   if(!sent&&EventWaitHandle.TryOpenExisting(InstanceName(widget)+".Stop",out var stop)){using(stop)stop.Set();sent=true;}
+   await Task.Delay(100).ConfigureAwait(false);
+  }
+  if(!sent)throw new IOException("Закройте виджет через его значок возле часов и повторите действие.");
   throw new IOException("Виджет ещё завершает работу. Подождите и повторите действие.");
  }
  public async Task RemoveAsync(Widget widget)
@@ -199,8 +225,8 @@ public sealed class WidgetManager
    for(int attempt=0;;attempt++)
    {
     try{operation();return;}
-    catch(IOException) when(attempt<29){Thread.Sleep(100);}
-    catch(UnauthorizedAccessException) when(attempt<29){Thread.Sleep(100);}
+    catch(IOException) when(attempt<99){Thread.Sleep(100);}
+    catch(UnauthorizedAccessException) when(attempt<99){Thread.Sleep(100);}
    }
   }
   void DeleteContents(string folder,bool top)

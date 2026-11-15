@@ -13,7 +13,7 @@ public sealed partial class Player
  void UpdatePin(){
   UpdateFacePin();
   if(pinButton==null)return;
-  var shape=new System.Windows.Shapes.Path{Data=Geometry.Parse("M 8,2 L 20,2 L 18,10 L 23,15 L 15,15 L 15,24 L 12,27 L 12,15 L 5,15 L 10,10 Z"),Fill=Topmost?Brushes.Black:Brushes.SlateGray,Width=20,Height=20,Stretch=Stretch.Uniform,RenderTransformOrigin=new Point(.5,.5),RenderTransform=new RotateTransform(Topmost?0:-45)};
+  var shape=PlayerIcons.Pin(Topmost,Topmost?Brushes.Black:Brushes.SlateGray);
   pinButton.Content=shape;pinButton.Background=Topmost?(Brush)new BrushConverter().ConvertFromString(appearance.Accent)!:Brushes.Transparent;
   pinButton.ToolTip=Topmost?"Закреплён поверх окон — нажмите, чтобы открепить":"Не закреплён — нажмите, чтобы закрепить";
   System.Windows.Automation.AutomationProperties.SetName(pinButton,Topmost?"Открепить плеер":"Закрепить плеер");
@@ -24,6 +24,7 @@ public sealed partial class Player
  static bool ValidColor(string value){try{return value.Length==7&&value[0]=='#'&&ColorConverter.ConvertFromString(value) is Color;}catch{return false;}}
  void LoadAppearance(){try{var a=JsonSerializer.Deserialize<Appearance>(File.ReadAllText(AppearancePath));if(a!=null&&Themes.Contains(a.Theme)&&ValidColor(a.Accent)&&(a.BorderColor==null||ValidColor(a.BorderColor))&&(a.BackgroundColor==null||ValidColor(a.BackgroundColor)))appearance=a with{Sensitivity=Math.Clamp(a.Sensitivity,0,3),Scale=Math.Clamp(a.Scale,0.85,1.4),Alpha=Math.Clamp(a.Alpha,0.65,1),Round=Math.Clamp(a.Round,0,26),BorderWidth=Math.Clamp(a.BorderWidth,0,4),CoverSize=Math.Clamp(a.CoverSize,40,64)};}catch{}ApplyAppearance();}
  void ApplyAppearance(){
+  CancelRecoveryAnimation();
   if(Content is not Border body)return;
   bool dark=appearance.Theme is "Тёмная" or "Minecraft" or "Ночной океан" or "Лес" or "Терминал" or "Винил";
   string bg=appearance.Theme switch{"Тёмная"=>"#19212D","Minecraft"=>"#383D34","Ретро"=>"#E0DAC5","Лаванда"=>"#EBE5F5","Ночной океан"=>"#102C46","Лес"=>"#213E32","Кофе"=>"#3E2C26","Персик"=>"#FFE4D7","Терминал"=>"#0B1911",_=>"#F2F3F6"};
@@ -41,24 +42,25 @@ public sealed partial class Player
   cover.Width=cover.Height=appearance.CoverSize;if(cover.Parent is Border art){art.Width=art.Height=appearance.CoverSize;}artist.Visibility=appearance.ShowArtist?Visibility.Visible:Visibility.Collapsed;timeLabel.Visibility=appearance.ShowTime?Visibility.Visible:Visibility.Collapsed;
   Walk(body);play.Background=accent;play.Foreground=Brushes.Black;
   ApplyThemeVisuals(body);ApplyDeviceFace(body);UpdatePin();SizePlayer();
+  if(IsLoaded)Dispatcher.BeginInvoke((Action)UpdateRecoveryArrow,System.Windows.Threading.DispatcherPriority.Loaded);
  }
  void Customize(bool preview=false){
-  if(customizeWindow!=null){customizeWindow.Activate();return;}
+  if(customizeWindow!=null){if(!preview)FocusPreferencesWindow(customizeWindow);return;}
   var original=appearance;
   bool saved=false, syncing=false;
-  var ink=BrushOf("#292535");var muted=BrushOf("#645E71");var purple=BrushOf("#6544A0");
-  var w=CreatePreferencesWindow("Оформление",692);
+  var ink=PreferencesText;var muted=PreferencesMuted;var purple=PreferencesAccent;
+  var w=CreatePreferencesWindow("Оформление",720);
   customizeWindow=w;
-  var shell=new DockPanel();w.Content=new Border{Background=w.Background,Padding=new Thickness(20,14,20,12),Child=shell};
+  var shell=new DockPanel();w.Content=PreferencesShell(w,new Border{Padding=new Thickness(24,20,18,18),Child=shell});
   var header=new StackPanel();DockPanel.SetDock(header,Dock.Top);shell.Children.Add(header);
   TextBlock Text(string value,double size,Brush color)=>new(){Text=value,FontSize=size,Foreground=color,TextWrapping=TextWrapping.Wrap};
-  header.Children.Add(Text("Оформление плеера",25,ink));
-  header.Children.Add(Text("Изменения сразу видны в плеере.",13,muted));
+  header.Children.Add(Text("Оформление плеера",27,ink));
+  var subtitle=Text("Изменения сразу видны в плеере.",12,muted);subtitle.Margin=new Thickness(0,5,0,0);header.Children.Add(subtitle);
   Button Btn(object label)=>PreferencesButton(label);
-  void Mark(Button b,bool selected){b.Background=selected?BrushOf("#EEE7FA"):Brushes.White;b.BorderBrush=selected?purple:BrushOf("#DDD8E4");}
+  void Mark(Button b,bool selected)=>MarkPreferencesButton(b,selected);
   var nav=new System.Windows.Controls.Primitives.UniformGrid{Rows=1,Margin=new Thickness(0,14,0,10)};header.Children.Add(nav);
   var footer=new DockPanel{Margin=new Thickness(0,12,0,0)};DockPanel.SetDock(footer,Dock.Bottom);shell.Children.Add(footer);
-  var save=Btn("Сохранить");save.Background=purple;save.Foreground=Brushes.White;
+  var save=Btn("Сохранить");save.Background=purple;save.Foreground=PreferencesBackground;
   var cancel=Btn("Отмена");cancel.Margin=new Thickness(0,0,8,0);
   foreach(var b in new[]{save,cancel}){DockPanel.SetDock(b,Dock.Right);footer.Children.Add(b);}
   var reset=Btn("Сбросить");reset.HorizontalAlignment=HorizontalAlignment.Left;footer.Children.Add(reset);
@@ -72,7 +74,7 @@ public sealed partial class Player
   var cards=new System.Collections.Generic.Dictionary<string,Button>();
   StackPanel Card(StackPanel parent,string heading){
    var box=new StackPanel();box.Children.Add(Text(heading,17,ink));
-   parent.Children.Add(new Border{Background=Brushes.White,CornerRadius=new CornerRadius(12),Padding=new Thickness(16),Margin=new Thickness(2,3,2,8),Child=box});return box;
+   parent.Children.Add(PreferencesCard(box));return box;
   }
   var palette=Card(colors,"Палитра");var swatches=new System.Windows.Controls.Primitives.UniformGrid{Rows=1,Margin=new Thickness(0,12,0,10)};palette.Children.Add(swatches);
   string[] roles={"Акцент","Рамка","Фон"};int role=0;
@@ -111,11 +113,11 @@ public sealed partial class Player
   timeCheck.Click+=(_,_)=>{appearance=appearance with{ShowTime=timeCheck.IsChecked==true};ApplyAppearance();};
   void Sync(){syncing=true;foreach(var pair in cards)Mark(pair.Value,pair.Key==appearance.Theme);for(int i=0;i<3;i++){samples[i].Background=BrushOf(ColorAt(i));Mark(chips[i],role==i);}code.Text=ColorAt(role);wheel.SetColor(code.Text);brightness.Value=wheel.Value;foreach(var action in updates)action();coverSetting.Visibility=StudioFace.For(appearance.Theme).SceneIsBackground?Visibility.Collapsed:Visibility.Visible;artistCheck.IsChecked=appearance.ShowArtist;timeCheck.IsChecked=appearance.ShowTime;syncing=false;}
   foreach(var name in new[]{"Винил","Закат","Карманный LCD"}.Concat(Themes.Where(t=>t is not ("Винил" or "Закат" or "Карманный LCD")))){
-   var content=new StackPanel();var img=new Image{Height=65,Stretch=Stretch.Uniform};
+   var content=new StackPanel();var img=new Image{Height=80,Stretch=Stretch.Uniform};
    using(var stream=typeof(Player).Assembly.GetManifestResourceStream("preview."+name+".png")){
     if(stream!=null){var bitmap=new System.Windows.Media.Imaging.BitmapImage();bitmap.BeginInit();bitmap.CacheOption=System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;bitmap.StreamSource=stream;bitmap.EndInit();bitmap.Freeze();img.Source=bitmap;}
    }
-   content.Children.Add(img);var label=Text(name,13,ink);label.HorizontalAlignment=HorizontalAlignment.Center;label.Margin=new Thickness(0,5,0,0);content.Children.Add(label);
+   content.Children.Add(img);var label=Text(name,13,ink);label.HorizontalAlignment=HorizontalAlignment.Center;label.Margin=new Thickness(0,9,0,0);content.Children.Add(label);
    var b=Btn(content);System.Windows.Automation.AutomationProperties.SetName(b,name);b.Margin=new Thickness(3);cards.Add(name,b);gallery.Children.Add(b);
    b.Click+=(_,_)=>{if(appearance.Theme==name)return;appearance=appearance with{Theme=name,Accent=ThemeAccent(name),BorderColor=ThemeAccent(name),BackgroundColor=null,Round=name=="Minecraft"?0:20,BorderWidth=name=="Minecraft"?3:1};Sync();ApplyAppearance();};
   }
@@ -124,6 +126,6 @@ public sealed partial class Player
   cancel.Click+=(_,_)=>w.Close();cancel.IsCancel=true;
   save.Click+=(_,_)=>{try{Directory.CreateDirectory(Path.GetDirectoryName(AppearancePath)!);File.WriteAllText(AppearancePath,JsonSerializer.Serialize(appearance));saved=true;w.Close();}catch(Exception ex){MessageBox.Show(w,ex.Message,"Не удалось сохранить");}};
   w.Closed+=(_,_)=>{if(!saved){appearance=original;ApplyAppearance();}customizeWindow=null;};
-  Sync();Page(0);if(!preview){shownByUser=true;Show();w.Show();}
+  Sync();Page(0);if(!preview){shownByUser=true;Show();FocusPreferencesWindow(w);}
  }
 }

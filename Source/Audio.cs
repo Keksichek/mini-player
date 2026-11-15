@@ -69,5 +69,15 @@ static class Audio {
  }
  public static List<Entry> List(){var result=new List<Entry>();Visit((name,v)=>{v.GetMasterVolume(out float value);result.Add(new Entry(name,value*100));});return result.GroupBy(e=>e.Name,StringComparer.OrdinalIgnoreCase).Select(g=>new Entry(g.Key,g.Average(e=>e.Volume))).ToList();}
  public static void Set(string name,double value){if(string.IsNullOrEmpty(name))throw new InvalidOperationException("Выберите приложение для громкости");int matched=0;Visit((n,v)=>{if(!string.Equals(n,name,StringComparison.OrdinalIgnoreCase))return;var context=Guid.Empty;v.SetMasterVolume((float)Math.Clamp(value/100,0,1),ref context);matched++;});if(matched==0)throw new InvalidOperationException("Аудиосессия не найдена");}
- public static string? Match(string source,IEnumerable<Entry> entries){var normalized=new string(source.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());return entries.Select(e=>e.Name).FirstOrDefault(n=>{var key=new string(n.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());if(normalized.Contains("yandex")&&normalized.Contains("music")&&(key.Contains("yandex")&&key.Contains("music")||key.Contains("яндекс")&&key.Contains("музык")))return true;return key.Length>=5&&normalized.Contains(key);});}
+ public static string? Match(string source,IEnumerable<Entry> entries){
+  static string Normalize(string text)=>new(text.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+  static string Stem(string text){text=text.Replace('\\','/');text=text[(text.LastIndexOf('/')+1)..];return text.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)?text[..^4]:text;}
+  var names=entries.Select(e=>e.Name).ToArray();var stem=Stem(source);var normalized=Normalize(stem);if(normalized.Length==0)return null;
+  var exact=names.FirstOrDefault(name=>Normalize(Stem(name))==normalized);if(exact!=null)return exact;
+  var tokens=stem.Split(new[]{'.','_','!','-'},StringSplitOptions.RemoveEmptyEntries).Select(Normalize).ToArray();
+  return names.FirstOrDefault(name=>{var key=Normalize(Stem(name));if(key.Length==0)return false;
+   if(normalized.Contains("yandex")&&normalized.Contains("music")&&(key.Contains("yandex")&&key.Contains("music")||key.Contains("яндекс")&&key.Contains("музык")))return true;
+   return key.Length>=5&&tokens.Contains(key);
+  });
+ }
 }

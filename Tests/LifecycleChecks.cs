@@ -18,7 +18,7 @@ internal static class LifecycleChecks
    if(File.Exists(Path.Combine(manager.WidgetDirectory(widget),".widget-install.json")))await manager.RemoveAsync(widget);
    await manager.InstallAsync(widget);
    string data=manager.DataDirectory(widget);Directory.CreateDirectory(data);
-   File.WriteAllText(Path.Combine(data,"settings.json"),"{\"X\":80,\"Y\":80,\"Pin\":false,\"Auto\":false,\"Source\":\"\"}");
+   File.WriteAllText(Path.Combine(data,"settings.json"),"{\"X\":80,\"Y\":80,\"Pin\":false,\"Auto\":false,\"Source\":\"\",\"MovementLocked\":true}");
    File.WriteAllText(Path.Combine(data,"appearance.json"),"{\"Theme\":\"Лаванда\",\"Accent\":\"#B9A1FF\"}");
    File.WriteAllText(Path.Combine(data,"hotkeys.json"),"{}");
    await manager.LaunchAsync(widget);
@@ -31,8 +31,10 @@ internal static class LifecycleChecks
    Console.WriteLine("Second launch / show existing instance: PASS");
    await manager.StopAsync(widget);
    if(manager.IsRunning(widget))throw new Exception("Player failed to stop.");
-   using(var settings=JsonDocument.Parse(File.ReadAllText(Path.Combine(data,"settings.json"))))
+   using(var settings=JsonDocument.Parse(File.ReadAllText(Path.Combine(data,"settings.json")))){
     if(!settings.RootElement.TryGetProperty("AudioTarget",out _))throw new Exception("Player did not save its live settings into the launcher Data directory.");
+    if(settings.RootElement.GetProperty("Pin").GetBoolean()||settings.RootElement.GetProperty("Auto").GetBoolean()||!settings.RootElement.GetProperty("MovementLocked").GetBoolean())throw new Exception("Player overwrote persisted settings before startup completed.");
+   }
    Console.WriteLine("Graceful stop / managed settings save: PASS");
    await manager.RemoveAsync(widget);
    if(manager.IsInstalled(widget)||!File.Exists(Path.Combine(data,"settings.json")))throw new Exception("Widget removal did not preserve settings.");

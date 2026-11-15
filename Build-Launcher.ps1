@@ -27,8 +27,9 @@ function Compile-App([string]$Name,[string]$SourceDirectory,[string]$Destination
  [Microsoft.CodeAnalysis.SyntaxTree[]]$trees=@(foreach($file in Get-ChildItem -LiteralPath $SourceDirectory -Filter '*.cs' -File){
   [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($file.FullName),[Text.Encoding]::UTF8),$parse,$file.FullName)
  })
+ if(!$Player){$shared=Join-Path $projectRoot 'Shared\UpdateProtocol.cs';$trees+=[Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($shared),[Text.Encoding]::UTF8),$parse,$shared)}
  [Microsoft.CodeAnalysis.MetadataReference[]]$references=$baseReferences
- if($Player){foreach($name in @('Microsoft.Windows.SDK.NET.dll','WinRT.Runtime.dll')){$references+=[Microsoft.CodeAnalysis.MetadataReference]::CreateFromFile((Join-Path $projectRoot ('App\'+$name)))}}
+ if($Player){foreach($dependencyName in @('Microsoft.Windows.SDK.NET.dll','WinRT.Runtime.dll')){$references+=[Microsoft.CodeAnalysis.MetadataReference]::CreateFromFile((Join-Path $projectRoot ('App\'+$dependencyName)))}}
  $options=[Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions]::new([Microsoft.CodeAnalysis.OutputKind]::WindowsApplication).WithOptimizationLevel([Microsoft.CodeAnalysis.OptimizationLevel]::Release).WithNullableContextOptions([Microsoft.CodeAnalysis.NullableContextOptions]::Enable)
  $compilation=[Microsoft.CodeAnalysis.CSharp.CSharpCompilation]::Create($Name,$trees,$references,$options)
  [Microsoft.CodeAnalysis.ResourceDescription[]]$resources=@(if($Player){foreach($file in Get-ChildItem (Join-Path $projectRoot 'screenshots') -Filter '*.png' | Where-Object {$_.Name -notlike '*-expanded.png' -and $_.Name -notlike '*preview.png'}){
@@ -36,6 +37,7 @@ function Compile-App([string]$Name,[string]$SourceDirectory,[string]$Destination
   $provider=[Func[IO.Stream]]{[IO.File]::OpenRead($resourceFile)}.GetNewClosure()
   [Microsoft.CodeAnalysis.ResourceDescription]::new(('preview.'+$file.Name),$provider,$true)
  }})
+ if(!$Player){$publicFile=Join-Path $projectRoot 'Shared\UpdatePublicKey.xml';$provider=[Func[IO.Stream]]{[IO.File]::OpenRead($publicFile)}.GetNewClosure();$resources+=[Microsoft.CodeAnalysis.ResourceDescription]::new('UpdatePublicKey.xml',$provider,$true)}
  $stream=[IO.File]::Create($Destination)
  try{$result=$compilation.Emit($stream,$null,$null,$null,$resources)}finally{$stream.Dispose()}
  foreach($diagnostic in $result.Diagnostics | Where-Object {$_.Severity -in 'Error','Warning' -and $_.Id -ne 'CS1701'} | Select-Object -Unique){Write-Host $diagnostic}

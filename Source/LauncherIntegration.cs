@@ -81,20 +81,31 @@ public sealed partial class Player
    }
    LaunchContext.ImportPreviousSettings();
    var application=new PlayerApplication();var player=new Player();
+   using var ready=new EventWaitHandle(false,EventResetMode.ManualReset,LaunchContext.InstanceName+".Ready");
+   bool startupComplete=false;
+   var startupActions=new Queue<Action>();
    var events=new List<EventWaitHandle>();var waits=new List<RegisteredWaitHandle>();
    void Listen(string suffix,Action callback){
     var signal=new EventWaitHandle(false,EventResetMode.AutoReset,LaunchContext.InstanceName+suffix);events.Add(signal);
     waits.Add(ThreadPool.RegisterWaitForSingleObject(signal,(_,_)=>{
-     if(!application.Dispatcher.HasShutdownStarted)application.Dispatcher.BeginInvoke(callback);
+     if(!application.Dispatcher.HasShutdownStarted)application.Dispatcher.BeginInvoke((Action)(()=>{
+      if(!startupComplete){startupActions.Enqueue(callback);return;}callback();
+     }));
     },null,Timeout.Infinite,false));
    }
    Listen(".Show",()=>player.ReturnToScreen());
    Listen(".Settings",()=>{player.ReturnToScreen();player.OpenSettings();});
    Listen(".Customize",()=>{player.ReturnToScreen();player.Customize();});
+   Listen(".HubSettings",()=>{player.RefreshHubInterface(true);player.UpdateRecoveryArrow();});
    Listen(".Stop",()=>{player.closing=true;application.Shutdown();});
    player.Loaded+=(_,_)=>{
     if(action==".Settings")player.OpenSettings();else if(action==".Customize")player.Customize();
-    if(Array.IndexOf(args,"--show-existing")>=0)player.ReturnToScreen();
+    if(Array.IndexOf(args,"--show-existing")>=0){
+     // Initial placement must not turn a saved automatic behavior into manual mode.
+     bool manual=player.shownByUser;player.ReturnToScreen();player.shownByUser=manual;
+    }
+    startupComplete=true;ready.Set();
+    while(startupActions.Count>0&&!application.Dispatcher.HasShutdownStarted)startupActions.Dequeue()();
    };
    try{application.Run(player);}finally{
     foreach(var wait in waits)wait.Unregister(null!);foreach(var signal in events)signal.Dispose();

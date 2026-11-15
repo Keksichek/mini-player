@@ -4,7 +4,8 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>disable</ImplicitUsings>
+    <ImplicitUsings>disable</ImplicitUsings><GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AssemblyName>Launcher</AssemblyName>
   </PropertyGroup>
+ <ItemGroup><Compile Include="../Shared/UpdateProtocol.cs" Link="UpdateProtocol.cs"/><EmbeddedResource Include="../Shared/UpdatePublicKey.xml"><LogicalName>UpdatePublicKey.xml</LogicalName></EmbeddedResource></ItemGroup>
 </Project>

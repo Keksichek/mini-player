@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Threading;
 using WidgetLauncher;
 
 static class WidgetManagerChecks
@@ -37,6 +38,13 @@ static class WidgetManagerChecks
    Package(root,("App/MiniPlayer.exe","exe",0),("App/MiniPlayer.dll","dll",0),("App/Fonts/Onest.ttf","font",0));
    await manager.InstallAsync(widget);
    Check(manager.IsInstalled(widget),"Install succeeds in selected Unicode directory");
+   using(var owned=new ManualResetEventSlim())using(var release=new ManualResetEventSlim())
+   using(var ready=new EventWaitHandle(true,EventResetMode.ManualReset,manager.InstanceName(widget)+".Ready"))
+   using(var show=new EventWaitHandle(false,EventResetMode.AutoReset,manager.InstanceName(widget)+".Show")){
+    var owner=new Thread(()=>{using(var mutex=new Mutex(true,manager.InstanceName(widget))){owned.Set();release.Wait();mutex.ReleaseMutex();}}){IsBackground=true};owner.Start();
+    try{Check(owned.Wait(5000),"Running-widget IPC fixture is ready");await manager.LaunchAsync(widget);Check(show.WaitOne(1000),"Showing running widget signals it without starting another runtime process");}
+    finally{release.Set();owner.Join(5000);}
+   }
    Check(File.ReadAllText(Path.Combine(root,"Widgets","mini-player","App","MiniPlayer.dll"))=="dll","Payload resides under launcher Widgets directory");
    Check(Directory.GetDirectories(Path.Combine(root,"Widgets"),".install-*").Length==0,"Successful install leaves no staging directory");
    await Reject("Existing widget is not overwritten",()=>manager.InstallAsync(widget));

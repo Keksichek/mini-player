@@ -13,10 +13,15 @@ public sealed partial class Player
 {
  Canvas? deviceFace;
  Button? facePin;
+ Button? faceLock;
+ Button? faceRepeat;
+ Button? faceMenu;
+ Button? faceHide;
  ContextMenu AttachPlayerMenu(Button button){
   var menu=new ContextMenu();
   void Item(string label,Action action){var item=new MenuItem{Header=label};item.Click+=(_,_)=>action();menu.Items.Add(item);}
-  Item("Настройки",()=>OpenSettings());Item("Кастомизация",()=>Customize());Item("Закрепить / открепить",TogglePin);Item("Скрыть",()=>Hide());
+  Item("Настройки",()=>OpenSettings());Item("Кастомизация",()=>Customize());
+  Item("Скрыть",HidePlayer);
   button.ToolTip="Меню плеера";
   button.Click+=(_,_)=>{menu.PlacementTarget=button;menu.Placement=System.Windows.Controls.Primitives.PlacementMode.Bottom;menu.IsOpen=true;};
   return menu;
@@ -37,6 +42,7 @@ public sealed partial class Player
   label.ToolTipOpening+=(_,e)=>{if(!TitleIsClipped(label))e.Handled=true;};
  }
  void TogglePin(){Topmost=!Topmost;UpdatePin();Save();}
+ void HidePlayer(){shownByUser=true;Hide();}
  void UpdateFacePin(){
   if(facePin==null)return;
   bool lcd=appearance.Theme=="Карманный LCD",sun=appearance.Theme=="Закат";
@@ -48,13 +54,24 @@ public sealed partial class Player
    ink=BrushOf(StudioFace.For(appearance.Theme).Ink);
    facePin.Background=BrushOf(Topmost?"#24FFFFFF":"#0CFFFFFF");
   }
-  var content=new StackPanel{Orientation=Orientation.Horizontal};
-  content.Children.Add(new Path{Data=Geometry.Parse("M 4,1 L 12,1 L 11,3 L 11,7 L 14,10 L 9,10 L 8,16 L 7,10 L 2,10 L 5,7 L 5,3 Z"),Width=12,Height=14,Stretch=Stretch.Uniform,Stroke=ink,StrokeThickness=1.4,Fill=Topmost?ink:Brushes.Transparent,RenderTransformOrigin=new Point(.5,.5),RenderTransform=new RotateTransform(Topmost?0:-42)});
-  if(!sceneBackground)content.Children.Add(new TextBlock{Text=Topmost?"Закреплён":"Откреплён",FontSize=10,Foreground=ink,Margin=new Thickness(4,0,0,0),VerticalAlignment=VerticalAlignment.Center});
-  facePin.Content=content;
+  facePin.Content=PlayerIcons.Pin(Topmost,ink);
   facePin.ToolTip=Topmost?"Открепить плеер":"Закрепить поверх окон";
   System.Windows.Automation.AutomationProperties.SetName(facePin,(Topmost?"Закреплён. ":"Откреплён. ")+facePin.ToolTip);
  }
+ void UpdateFaceLock(){
+  if(faceLock==null)return;
+  faceLock.Content=PlayerIcons.MovementLock(movementLocked,movementLocked?AccentInk(appearance.Accent):faceLock.Foreground);
+  faceLock.ToolTip=movementLocked?"Перемещение заблокировано — нажмите, чтобы разрешить":"Окно можно перемещать — нажмите, чтобы заблокировать";
+  faceLock.Background=movementLocked?BrushOf(appearance.Accent):UtilitySurface();
+  System.Windows.Automation.AutomationProperties.SetName(faceLock,movementLocked?"Разрешить перемещение плеера":"Запретить перемещение плеера");
+ }
+ void UpdateFaceRepeat(){
+  if(faceRepeat==null)return;
+  faceRepeat.Content=PlayerIcons.Repeat(repeatMode,repeatMode==Windows.Media.MediaPlaybackAutoRepeatMode.None?faceRepeat.Foreground:AccentInk(appearance.Accent));
+  faceRepeat.Background=repeatMode==Windows.Media.MediaPlaybackAutoRepeatMode.None?UtilitySurface():BrushOf(appearance.Accent);
+  System.Windows.Automation.AutomationProperties.SetName(faceRepeat,repeat.ToolTip?.ToString()??"Повтор");
+ }
+ Brush UtilitySurface()=>BrushOf(StudioFace.For(appearance.Theme).SceneIsBackground?"#18FFFFFF":appearance.Theme=="Карманный LCD"?"#414C45":appearance.Theme=="Винил"?"#DDD1D6":appearance.Theme=="Закат"?"#FFF5ED":StudioFace.For(appearance.Theme).Key);
  RotateTransform? platterRotation;
  FaceMeter? activeMeter;
  SceneMotion? sceneMotion;
@@ -112,11 +129,12 @@ public sealed partial class Player
   bool sceneBackground=studio?.SceneIsBackground==true;
   body.Padding=sceneBackground?new Thickness(0):new Thickness(8);
   stack.Children[0].Visibility=stack.Children[1].Visibility=Visibility.Collapsed;
-  peakReader.Dispose();facePin=null;platterRotation=null;activeMeter=null;sceneMotion=null;
+  peakReader.Dispose();facePin=null;faceLock=null;faceRepeat=null;faceMenu=null;faceHide=null;platterRotation=null;activeMeter=null;sceneMotion=null;
 
   Brush B(string c)=>BrushOf(c);
   LinearGradientBrush Gradient(string first,string last,double angle=90)=>new((Color)ColorConverter.ConvertFromString(first),(Color)ColorConverter.ConvertFromString(last),angle);
-  var face=new Canvas{Width=studio?.Width??(vinyl?360:sun?320:230),Height=studio?.Height??(vinyl?110:sun?168:204),Background=Brushes.Transparent,HorizontalAlignment=HorizontalAlignment.Center};
+  double originalHeight=studio?.Height??(vinyl?110:sun?168:204);
+  var face=new Canvas{Width=studio?.Width??(vinyl?360:sun?320:230),Height=originalHeight+VolumeFooterHeight,Background=Brushes.Transparent,HorizontalAlignment=HorizontalAlignment.Center};
   if(sceneBackground){
    double radius=Math.Max(0,appearance.Round-appearance.BorderWidth);
    face.Clip=new RectangleGeometry(new Rect(0,0,face.Width,face.Height),radius,radius);
@@ -160,7 +178,7 @@ public sealed partial class Player
   }
   void Transport(Button src,double x,double y,double w,double h,Brush fill,string hint){
    var b=Key(x,y,w,h,"",hint,fill,()=>src.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)));
-      var glyph=new Path{Width=src==play?14:12,Height=src==play?15:12,Stretch=Stretch.Fill,
+      var glyph=new Path{Width=src==play?13:11,Height=src==play?14:11,Stretch=Stretch.Fill,
     Fill=sceneBackground?(src==play?AccentInk(appearance.Accent):ink):sun&&src==play?Brushes.White:B("#322E30")};
    var geometry=new Style(typeof(Path));
    string path=src==prev?"M 1,1 L 3,1 L 3,13 L 1,13 Z M 13,1 L 4,7 L 13,13 Z":
@@ -177,19 +195,20 @@ public sealed partial class Player
   }
   Brush metal=Gradient("#F0E9E6","#A79DA1");
   double scale=appearance.CoverSize/52;
+  Rect repeatBounds;
   if(studio!=null){
    var scene=studio.Scene;
    var backdrop=new StudioArt(appearance.Theme);
-   Put(backdrop,scene.X,scene.Y,scene.Width,scene.Height);
+   Put(backdrop,scene.X,scene.Y,scene.Width,scene.Height+(sceneBackground?VolumeFooterHeight:0));
    string theme=appearance.Theme;
    if(theme is "Светлая" or "Кофе" or "Лес" or "Терминал" or "Ретро" or "Лаванда" or "Персик" or "Ночной океан" or "Тёмная" or "Minecraft"){
     sceneMotion=new SceneMotion(theme){Clip=backdrop.Clip};
-    Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height);
+    Put(sceneMotion,scene.X,scene.Y,scene.Width,scene.Height+(sceneBackground?VolumeFooterHeight:0));
    }
    if(sceneBackground){
     if(appearance.BackgroundColor!=null)
-     Put(new Border{Background=B(appearance.BackgroundColor),Opacity=.35,IsHitTestVisible=false},0,0,studio.Width,studio.Height);
-    Put(new Border{Background=SceneShade(theme),IsHitTestVisible=false},0,0,studio.Width,studio.Height);
+     Put(new Border{Background=B(appearance.BackgroundColor),Opacity=.35,IsHitTestVisible=false},0,0,studio.Width,face.Height);
+    Put(new Border{Background=SceneShade(theme),IsHitTestVisible=false},0,0,studio.Width,face.Height);
     Caption(title,studio.Title.X,studio.Title.Y,studio.TextWidth,17,ink);
     if(appearance.ShowArtist)Caption(artist,16,70,248,11,ink);
     if(appearance.ShowTime)Caption(timeLabel,studio.Clock.X,studio.Clock.Y,110,10,ink);
@@ -197,6 +216,7 @@ public sealed partial class Player
     Transport(prev,16,100,32,32,surface,"Предыдущий трек");
     Transport(play,56,96,40,40,accent,"Воспроизведение / пауза");
     Transport(next,104,100,32,32,surface,"Следующий трек");
+    repeatBounds=new Rect(144,101,30,30);
    }else{
    var pos=studio.Artwork;
    var (factor,limit,radius,edge,mat)=theme switch{
@@ -218,11 +238,12 @@ public sealed partial class Player
    Caption(title,studio.Title.X,studio.Title.Y,studio.TextWidth,titleSize,ink);
    if(appearance.ShowArtist)Caption(artist,studio.Title.X,studio.Title.Y+titleSize+5,studio.TextWidth,11,ink);
    if(appearance.ShowTime)Caption(timeLabel,studio.Clock.X,studio.Clock.Y,90,10,ink);
-   var keys=studio.Controls;int width=studio.KeyWidth;
+   var keys=studio.Controls;int width=theme=="Тёмная"?46:studio.KeyWidth;int transportGap=theme=="Тёмная"?2:4;
    Transport(prev,keys.X,keys.Y,width,27,B(studio.Key),"Предыдущий трек");
    bool roundPlay=appearance.Theme is "Персик" or "Тёмная";
-   Transport(play,keys.X+width+4+(roundPlay?(width-36)/2:0),keys.Y-(roundPlay?4:0),roundPlay?36:width,roundPlay?36:27,accent,"Воспроизведение / пауза");
-   Transport(next,keys.X+2*(width+4),keys.Y,width,27,B(studio.Key),"Следующий трек");
+   Transport(play,keys.X+width+transportGap+(roundPlay?(width-36)/2:0),keys.Y-(roundPlay?4:0),roundPlay?36:width,roundPlay?36:27,accent,"Воспроизведение / пауза");
+   Transport(next,keys.X+2*(width+transportGap),keys.Y,width,27,B(studio.Key),"Следующий трек");
+   repeatBounds=theme=="Тёмная"?new Rect(154,129.5,20,24):new Rect(keys.X+2*(width+transportGap)+width+8,keys.Y+.5,26,26);
    }
   }else if(vinyl){
    double d=Math.Min(105,96*scale),x=54-d/2,y=55-d/2;
@@ -240,7 +261,8 @@ public sealed partial class Player
    Caption(title,125,16,178,15,ink);
    if(appearance.ShowArtist)Caption(artist,126,36,174,10,ink);
    Transport(prev,126,53,32,32,metal,"Предыдущий трек");Transport(play,164,50,38,38,accent,"Воспроизведение / пауза");Transport(next,208,53,32,32,metal,"Следующий трек");
-   if(appearance.ShowTime)Caption(timeLabel,127,89,128,10,ink);
+   repeatBounds=new Rect(249,57,24,24);
+   if(appearance.ShowTime)Caption(timeLabel,125,92,70,9,ink);
   }else if(sun){
    double d=Math.Min(107,92*scale);
    // The landscape stays visible until the media session supplies album art.
@@ -248,17 +270,19 @@ public sealed partial class Player
    var solar=new Ellipse{Width=45,Height=45,Fill=Gradient("#FFB154","#F66936")};Canvas.SetLeft(solar,28);Canvas.SetTop(solar,14);landscape.Children.Add(solar);
    foreach(var (g,c) in new[]{("M 0,51 Q 19,45 48,68 Q 70,44 92,53 L 92,92 L 0,92 Z","#E9854F"),("M 0,59 Q 35,82 60,66 Q 80,57 92,62 L 92,92 L 0,92 Z","#C35C40"),("M 0,83 Q 24,84 54,71 Q 75,63 92,74 L 92,92 L 0,92 Z","#9B4540")})landscape.Children.Add(new Path{Data=Geometry.Parse(g),Fill=B(c)});
    landscape.Width=landscape.Height=92;var view=new Viewbox{Child=landscape};Put(view,7,12,d,d);Art(7,12,d,d*.13);
-   var meta=new TextBlock{Text="♪   В ЭФИРЕ",FontSize=9,FontWeight=FontWeights.Bold,Foreground=B("#9B4127")};Put(meta,122,10,90,16);
+   var meta=new TextBlock{Text="♪   В ЭФИРЕ",FontSize=8,FontWeight=FontWeights.Bold,Foreground=B("#9B4127")};Put(meta,122,10,78,16);
    Caption(title,122,42,185,16,ink);if(appearance.ShowArtist)Caption(artist,122,68,184,11,ink);
    if(appearance.ShowTime)Caption(timeLabel,122,108,170,10,ink);
    Transport(prev,85,133,32,31,Brushes.Transparent,"Предыдущий трек");Transport(play,138,122,44,44,accent,"Воспроизведение / пауза");Transport(next,200,133,32,31,Brushes.Transparent,"Следующий трек");
+   repeatBounds=new Rect(244,135.5,26,26);
   }else{
    Box(2,2,226,115,B("#858877"),10);Box(4,4,222,111,Gradient("#303735","#202724"),8);
    Box(12,12,30*scale,30*scale,B("#414C45"),3);Shape("M 18,30 V 34 H 21 V 24 L 31,22 V 29 H 28 V 33 H 33 V 19 L 19,22 V 30 Z",ink);Art(12,12,30*scale,3);Caption(title,54,13,142,14,ink);
    if(appearance.ShowArtist)Caption(artist,54,35,160,10,ink);
-   if(appearance.ShowTime)Caption(timeLabel,13,94,150,10,ink);
+   if(appearance.ShowTime)Caption(timeLabel,13,96,100,10,ink);
    for(int row=0;row<3;row++)for(int i=0;i<44;i++)Oval(7+i*5+(row%2)*2,124+row*4,2,B("#555950"));
-   Transport(prev,4,146,53,52,metal,"Предыдущий трек");Transport(play,60,146,109,52,accent,"Воспроизведение / пауза");Transport(next,172,146,54,52,metal,"Следующий трек");
+   Transport(prev,4,146,53,52,metal,"Предыдущий трек");Transport(play,60,146,79,52,accent,"Воспроизведение / пауза");Transport(next,142,146,53,52,metal,"Следующий трек");
+   repeatBounds=new Rect(200,159,26,26);
   }
   var meter=new FaceMeter(vinyl,lcd,accent,studio==null?"":appearance.Theme);
   activeMeter=meter;RenderMotion();SyncMotion();
@@ -273,13 +297,26 @@ public sealed partial class Player
   meter.MouseLeftButtonUp+=async(_,e)=>{if(!meter.IsMouseCaptured)return;Locate(e);meter.ReleaseMouseCapture();e.Handled=true;await Seek();};
   meter.LostMouseCapture+=(_,_)=>seeking=false;
   meter.KeyDown+=async(_,e)=>{if(!seek.IsEnabled||e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right))return;seekTrack=track;seek.Value+=e.Key==System.Windows.Input.Key.Left?-5:5;e.Handled=true;await Seek();};
-  var pinPosition=studio!=null
-   ? (sceneBackground?new Point(12,10):new Point(studio.Width-112,2))
-   : new Point(vinyl?216:sun?201:137,vinyl?86:sun?4:92);
-  facePin=Key(pinPosition.X,pinPosition.Y,sceneBackground?26:80,sceneBackground?26:lcd?19:22,"","Закрепить поверх окон",metal,TogglePin);
-  var more=Key(studio!=null?studio.Width-(sceneBackground?38:28):vinyl?252:sun?286:198,studio!=null?(sceneBackground?10:2):vinyl?56:sun?4:10,26,sceneBackground?26:22,"⋯","Меню плеера",sceneBackground?B("#18FFFFFF"):vinyl?metal:B("#EAE3DB"));
-  if(sceneBackground){more.Foreground=ink;more.FontSize=18;}
+  double size=vinyl||lcd?20:24,gap=vinyl||lcd?3:4;
+  double rowX=vinyl?199:lcd?122:face.Width-(4*size+3*gap)-8;
+  double rowY=vinyl?89:lcd?94:sceneBackground?10:2;
+  var utilityInk=lcd?B("#DCF3B1"):studio!=null&&!sceneBackground?AccentInk(studio.Key):ink;
+  Button Utility(int column,string hint,Action? action=null){
+   var b=Key(rowX+column*(size+gap),rowY,size,size,"",hint,UtilitySurface(),action);
+   b.Foreground=utilityInk;return b;
+  }
+  facePin=Utility(0,"Поверх других окон",TogglePin);
+  faceLock=Utility(1,"Блокировка перемещения",ToggleMovementLock);
+  faceRepeat=Key(repeatBounds.X,repeatBounds.Y,repeatBounds.Width,repeatBounds.Height,"","Повтор",UtilitySurface(),()=>repeat.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent)));
+  faceRepeat.Foreground=sceneBackground?ink:lcd?B("#DCF3B1"):B("#322E30");
+  faceRepeat.SetBinding(IsEnabledProperty,new Binding("IsEnabled"){Source=repeat});
+  faceRepeat.SetBinding(ToolTipProperty,new Binding("ToolTip"){Source=repeat});
+  ToolTipService.SetShowOnDisabled(faceRepeat,true);
+  faceHide=Utility(2,"Скрыть плеер",HidePlayer);faceHide.Content=PlayerIcons.Eye(utilityInk);
+  var more=faceMenu=Utility(3,"Меню плеера");more.Content=PlayerIcons.ContextMenu(utilityInk);
   face.ContextMenu=AttachPlayerMenu(more);
+  UpdateFacePin();UpdateFaceLock();UpdateFaceRepeat();
+  AddVolumeFooter(face,originalHeight,ink,sceneBackground);
 
  }
  sealed class FaceMeter:FrameworkElement{

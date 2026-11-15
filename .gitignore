@@ -9,3 +9,9 @@ settings.json
 appearance.json
 .build/
 dist/
+# Local signing keys must never be published.
+**/private.xml
+*.key
+*.pfx
+*.p12
+*.pem

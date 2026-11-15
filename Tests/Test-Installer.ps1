@@ -5,7 +5,7 @@ New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $exePath = Join-Path $OutputDirectory 'InstallerChecks.exe'
-& $compiler /nologo /target:exe /platform:x64 /utf8output /out:$exePath /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll (Join-Path $repoRoot 'Installer\Shared.cs') (Join-Path $PSScriptRoot 'InstallerChecks.cs')
+& $compiler /nologo /target:exe /platform:x64 /utf8output /out:$exePath /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll (Join-Path $repoRoot 'Installer\Shared.cs') (Join-Path $repoRoot 'Installer\UiControls.cs') (Join-Path $PSScriptRoot 'InstallerChecks.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Installer check compilation failed.' }
 $scratch = Join-Path $OutputDirectory ('scratch-' + [Guid]::NewGuid().ToString('N'))
 $linkTarget = Join-Path $scratch 'junction-target'

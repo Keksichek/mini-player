@@ -14,9 +14,46 @@ using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using File=WidgetLauncherSetup.HubFile;
+using Directory=WidgetLauncherSetup.HubDirectory;
+
+[assembly: AssemblyFileVersion("0.1.0.0")]
+[assembly: AssemblyInformationalVersion(WidgetLauncherSetup.InstallEngine.ProductVersion)]
+[assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8")]
 
 namespace WidgetLauncherSetup
 {
+ // Canonical paths are used for validation and manifests. Extended paths are
+ // used only at the filesystem boundary, without changing system policy.
+ internal static class HubPath
+ {
+  public static string Disk(string path){string full=Path.GetFullPath(path);if(full.StartsWith(@"\\?\",StringComparison.Ordinal))return full;return full.StartsWith(@"\\",StringComparison.Ordinal)?@"\\?\UNC\"+full.Substring(2):@"\\?\"+full;}
+  public static string Plain(string path){if(path.StartsWith(@"\\?\UNC\",StringComparison.OrdinalIgnoreCase))return @"\\"+path.Substring(8);return path.StartsWith(@"\\?\",StringComparison.Ordinal)?path.Substring(4):path;}
+ }
+ internal static class HubFile
+ {
+  public static bool Exists(string path){return !String.IsNullOrEmpty(path)&&System.IO.File.Exists(HubPath.Disk(path));}
+  public static FileStream Create(string path){return System.IO.File.Create(HubPath.Disk(path));}
+  public static void Delete(string path){System.IO.File.Delete(HubPath.Disk(path));}
+  public static void Move(string source,string target){System.IO.File.Move(HubPath.Disk(source),HubPath.Disk(target));}
+  public static void Copy(string source,string target){Copy(source,target,false);}
+  public static void Copy(string source,string target,bool overwrite){System.IO.File.Copy(HubPath.Disk(source),HubPath.Disk(target),overwrite);}
+  public static FileAttributes GetAttributes(string path){return System.IO.File.GetAttributes(HubPath.Disk(path));}
+  public static void SetAttributes(string path,FileAttributes attributes){System.IO.File.SetAttributes(HubPath.Disk(path),attributes);}
+  public static string ReadAllText(string path){return System.IO.File.ReadAllText(HubPath.Disk(path));}
+  public static string ReadAllText(string path,Encoding encoding){return System.IO.File.ReadAllText(HubPath.Disk(path),encoding);}
+  public static void WriteAllText(string path,string value){System.IO.File.WriteAllText(HubPath.Disk(path),value);}
+  public static void WriteAllText(string path,string value,Encoding encoding){System.IO.File.WriteAllText(HubPath.Disk(path),value,encoding);}
+ }
+ internal static class HubDirectory
+ {
+  public static bool Exists(string path){return !String.IsNullOrEmpty(path)&&System.IO.Directory.Exists(HubPath.Disk(path));}
+  public static DirectoryInfo CreateDirectory(string path){return System.IO.Directory.CreateDirectory(HubPath.Disk(path));}
+  public static void Delete(string path){System.IO.Directory.Delete(HubPath.Disk(path));}
+  public static string[] GetFiles(string path){return System.IO.Directory.GetFiles(HubPath.Disk(path)).Select(HubPath.Plain).ToArray();}
+  public static string[] GetDirectories(string path){return System.IO.Directory.GetDirectories(HubPath.Disk(path)).Select(HubPath.Plain).ToArray();}
+  public static IEnumerable<string> EnumerateFileSystemEntries(string path){return System.IO.Directory.EnumerateFileSystemEntries(HubPath.Disk(path)).Select(HubPath.Plain);}
+ }
  public sealed class InstallMarker
  {
   public string ProductId { get; set; }
@@ -31,8 +68,24 @@ namespace WidgetLauncherSetup
  public static class InstallEngine
  {
   public const string ProductId="MiniPlayer.WidgetLauncher";
+  public const string ProductName="VibeWidgetsHub alpha";
+  public const string ProductVersion="0.19999999999999999999999999999999";
   public const string MarkerName="launcher-install.json";
-  public static string Normalize(string value) { return Path.GetFullPath(value).TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar); }
+  public static void ConfigureRuntime(){AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling",false);AppContext.SetSwitch("Switch.System.IO.BlockLongPaths",false);}
+  public static string ResolveDestination(string selected){
+   if(String.IsNullOrWhiteSpace(selected)||!Path.IsPathRooted(selected))throw new IOException("Выберите полный путь к папке установки.");
+   string drive=Path.GetPathRoot(selected);
+   if(drive.Length!=3||drive[1]!=':'||(drive[2]!='\\'&&drive[2]!='/'))throw new IOException("Выберите полный путь на локальном диске, например D:\\Приложения.");
+   string full=Path.GetFullPath(selected);
+   if(full.StartsWith("\\\\",StringComparison.Ordinal))throw new IOException("Выберите папку на локальном диске.");
+   if(File.Exists(full))throw new IOException("По этому пути находится файл. Выберите папку.");
+   NoLinks(full);
+   string trimmed=full.TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar);
+   if(File.Exists(Path.Combine(full,MarkerName))){ReadMarker(full);return ValidateDestination(full);}
+   string target=String.Equals(Path.GetFileName(trimmed),ProductName,StringComparison.OrdinalIgnoreCase)?full:Path.Combine(full,ProductName);
+   return ValidateDestination(target);
+  }
+  public static string Normalize(string value) { return Path.GetFullPath(HubPath.Plain(value)).TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar); }
   public static string Hash(string value) {
    using(var sha=SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(Normalize(value).ToUpperInvariant()))).Replace("-","").Substring(0,16);
   }
@@ -46,7 +99,8 @@ namespace WidgetLauncherSetup
    return full;
   }
   public static void NoLinks(string path) {
-   for(var p=new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(path)));p!=null;p=p.Parent)
+   string parent=Path.GetDirectoryName(Path.GetFullPath(path));
+   for(var p=parent==null?null:new DirectoryInfo(parent);p!=null;p=p.Parent)
     if(IsLink(p.FullName))throw new IOException("Папка установки не должна проходить через ссылку или перенаправление.");
    if(IsLink(path))throw new IOException("Обнаружена ссылка вместо обычного файла или папки.");
   }
@@ -77,8 +131,9 @@ namespace WidgetLauncherSetup
   public static bool IsRunning(string name) {
    Mutex mutex;try { if(Mutex.TryOpenExisting(name,out mutex)){mutex.Dispose();return true;} }catch(UnauthorizedAccessException){return true;}return false;
   }
+  static string[] InstalledIds(string root){var marker=File.Exists(Path.Combine(root,MarkerName))?ReadMarker(root):null;var ids=(marker==null?new string[0]:marker.WidgetIds??new string[0]).Concat(new[]{"mini-player"}).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();if(ids.Any(id=>!ValidId(id)))throw new IOException("Некорректное имя виджета.");return ids;}
   public static void CheckStopped(string root) {
-   if(IsRunning("Local\\WidgetLauncher."+Hash(root))||IsRunning("Local\\MiniPlayer."+Hash(Path.Combine(root,"Data","mini-player"))))
+   if(IsRunning("Local\\WidgetLauncher."+Hash(root))||InstalledIds(root).Any(id=>IsRunning("Local\\MiniPlayer."+Hash(Path.Combine(root,"Data",id)))))
     throw new IOException("Сначала закройте лаунчер и его мини-плеер, затем повторите установку.");
   }
   public static string Install(Stream zipStream,string requested,bool test,Action<int,string> progress) {
@@ -119,7 +174,7 @@ namespace WidgetLauncherSetup
      File.Move(Child(extract,relative),target);moved.Add(relative);
     }
     NoLinks(Child(root,"Widgets"));NoLinks(Child(root,"Data"));Directory.CreateDirectory(Child(root,"Widgets"));Directory.CreateDirectory(Child(root,"Data"));
-    var marker=new InstallMarker{ProductId=ProductId,InstallPath=root,InstallId=Hash(root),Files=files.Union(previous==null?new string[0]:previous.Files,StringComparer.OrdinalIgnoreCase).ToArray(),WidgetIds=ids.Union(previous==null||previous.WidgetIds==null?new string[0]:previous.WidgetIds).ToArray(),TestInstallation=test,Version="1.0.0"};
+    var marker=new InstallMarker{ProductId=ProductId,InstallPath=root,InstallId=Hash(root),Files=files.Union(previous==null?new string[0]:previous.Files,StringComparer.OrdinalIgnoreCase).ToArray(),WidgetIds=ids.Union(previous==null||previous.WidgetIds==null?new string[0]:previous.WidgetIds).ToArray(),TestInstallation=test,Version=ProductVersion};
     string markerPath=Child(root,MarkerName),tempMarker=Child(stage,MarkerName);File.WriteAllText(tempMarker,Json.Serialize(marker),new UTF8Encoding(false));
     if(File.Exists(markerPath)){File.Copy(markerPath,Path.Combine(backup,MarkerName));File.Delete(markerPath);}
     File.Move(tempMarker,markerPath);completed=true;
@@ -142,13 +197,25 @@ namespace WidgetLauncherSetup
   }
   static bool ValidId(string id){return !String.IsNullOrEmpty(id)&&id.Length<=64&&id.All(c=>(c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-');}
   static string RegistryPath(string root){return @"Software\Microsoft\Windows\CurrentVersion\Uninstall\WidgetLauncher-"+Hash(root);}
-  static void Register(string root){using(var key=Registry.CurrentUser.CreateSubKey(RegistryPath(root))){key.SetValue("DisplayName","Widget Launcher");key.SetValue("DisplayVersion","1.0.0");key.SetValue("Publisher","Mini Player Team");key.SetValue("InstallLocation",root);key.SetValue("DisplayIcon",Path.Combine(root,"Launcher.exe"));key.SetValue("UninstallString",Quote(Path.Combine(root,"Uninstall.exe")));key.SetValue("NoModify",1);key.SetValue("NoRepair",1);}}
-  static string[] ShortcutPaths(string root){string name="Widget Launcher.lnk";string common=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs),"Widget Launcher");return new[]{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),name),Path.Combine(common,name)};}
+  static void Register(string root){using(var key=Registry.CurrentUser.CreateSubKey(RegistryPath(root))){key.SetValue("DisplayName",ProductName);key.SetValue("DisplayVersion",ProductVersion);key.SetValue("Publisher","Mini Player Team");key.SetValue("InstallLocation",root);key.SetValue("DisplayIcon",Path.Combine(root,"Launcher.exe"));key.SetValue("UninstallString",Quote(Path.Combine(root,"Uninstall.exe")));key.SetValue("NoModify",1);key.SetValue("NoRepair",1);}}
+  static string[] ShortcutPaths(string root){string name=ProductName+".lnk";string common=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs),ProductName);return new[]{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),name),Path.Combine(common,name)};}
+  static string[] LegacyShortcutPaths(){string name="Widget Launcher.lnk";return new[]{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),name),Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs),"Widget Launcher",name)};}
   static string ShortcutTarget(object shortcut){return (string)shortcut.GetType().InvokeMember("TargetPath",BindingFlags.GetProperty,null,shortcut,null);}
   static object CreateShortcutObject(object shell,string path){return shell.GetType().InvokeMember("CreateShortcut",BindingFlags.InvokeMethod,null,shell,new object[]{path});}
   static void CreateShortcuts(string root){object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));try{foreach(string path in ShortcutPaths(root)){Directory.CreateDirectory(Path.GetDirectoryName(path));object shortcut=CreateShortcutObject(shell,path);try{string target=Path.Combine(root,"Launcher.exe");if(File.Exists(path)&&!String.Equals(ShortcutTarget(shortcut),target,StringComparison.OrdinalIgnoreCase))continue;shortcut.GetType().InvokeMember("TargetPath",BindingFlags.SetProperty,null,shortcut,new object[]{target});shortcut.GetType().InvokeMember("WorkingDirectory",BindingFlags.SetProperty,null,shortcut,new object[]{root});shortcut.GetType().InvokeMember("Description",BindingFlags.SetProperty,null,shortcut,new object[]{"Виджеты для рабочего стола"});shortcut.GetType().InvokeMember("Save",BindingFlags.InvokeMethod,null,shortcut,null);}finally{Marshal.FinalReleaseComObject(shortcut);}}}finally{Marshal.FinalReleaseComObject(shell);}}
-  static void RemoveShortcuts(string root){object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));try{foreach(string path in ShortcutPaths(root)){if(!File.Exists(path))continue;object shortcut=CreateShortcutObject(shell,path);try{if(String.Equals(ShortcutTarget(shortcut),Path.Combine(root,"Launcher.exe"),StringComparison.OrdinalIgnoreCase))File.Delete(path);}finally{Marshal.FinalReleaseComObject(shortcut);}}}finally{Marshal.FinalReleaseComObject(shell);}}
-  public static void StopApplications(string root){Signal("Local\\WidgetLauncher."+Hash(root)+".Stop");Signal("Local\\MiniPlayer."+Hash(Path.Combine(root,"Data","mini-player"))+".Stop");}
+  static void RemoveShortcuts(string root){object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));try{foreach(string path in ShortcutPaths(root).Concat(LegacyShortcutPaths())){if(!File.Exists(path))continue;object shortcut=CreateShortcutObject(shell,path);try{if(String.Equals(ShortcutTarget(shortcut),Path.Combine(root,"Launcher.exe"),StringComparison.OrdinalIgnoreCase))File.Delete(path);}finally{Marshal.FinalReleaseComObject(shortcut);}}}finally{Marshal.FinalReleaseComObject(shell);}}
+  static string RunName(string root){return "VibeWidgetsHub-"+Hash(root);}
+  static string RunCommand(string root){return Quote(Path.Combine(root,"Launcher.exe"))+" --autostart";}
+  public static void RemoveAutostart(string root){using(var key=Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run",true)){if(key!=null&&String.Equals(key.GetValue(RunName(root)) as string,RunCommand(root),StringComparison.OrdinalIgnoreCase))key.DeleteValue(RunName(root),false);}}
+  static void RelocateAutostart(string previous,string next){using(var key=Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run",true)){if(key==null||!String.Equals(key.GetValue(RunName(previous)) as string,RunCommand(previous),StringComparison.OrdinalIgnoreCase))return;if(key.GetValue(RunName(next))!=null&&!String.Equals(key.GetValue(RunName(next)) as string,RunCommand(next),StringComparison.OrdinalIgnoreCase))throw new IOException("В автозапуске уже есть другая запись для новой папки.");key.SetValue(RunName(next),RunCommand(next));key.DeleteValue(RunName(previous),false);}}
+  static void RetargetShortcuts(string previous,string next){object shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));try{foreach(string path in ShortcutPaths(previous).Concat(LegacyShortcutPaths())){if(!File.Exists(path))continue;object shortcut=CreateShortcutObject(shell,path);try{if(!String.Equals(ShortcutTarget(shortcut),Path.Combine(previous,"Launcher.exe"),StringComparison.OrdinalIgnoreCase))continue;shortcut.GetType().InvokeMember("TargetPath",BindingFlags.SetProperty,null,shortcut,new object[]{Path.Combine(next,"Launcher.exe")});shortcut.GetType().InvokeMember("WorkingDirectory",BindingFlags.SetProperty,null,shortcut,new object[]{next});shortcut.GetType().InvokeMember("Save",BindingFlags.InvokeMethod,null,shortcut,null);}finally{Marshal.FinalReleaseComObject(shortcut);}}}finally{Marshal.FinalReleaseComObject(shell);}}
+  public static void RelocateRegistration(string previous,string next){
+   using(var key=Registry.CurrentUser.OpenSubKey(RegistryPath(previous))){if(key!=null&&!String.Equals(key.GetValue("InstallLocation") as string,previous,StringComparison.OrdinalIgnoreCase))throw new IOException("Запись установки относится к другой папке.");}
+   using(var key=Registry.CurrentUser.OpenSubKey(RegistryPath(next))){if(key!=null)throw new IOException("Новая папка уже зарегистрирована как отдельная установка.");}
+   try{Register(next);RetargetShortcuts(previous,next);CreateShortcuts(next);RelocateAutostart(previous,next);Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(previous),false);}
+   catch{try{RetargetShortcuts(next,previous);RelocateAutostart(next,previous);Register(previous);Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(next),false);}catch{}throw;}
+  }
+  public static void StopApplications(string root){Signal("Local\\WidgetLauncher."+Hash(root)+".Stop");foreach(string id in InstalledIds(root))Signal("Local\\MiniPlayer."+Hash(Path.Combine(root,"Data",id))+".Stop");}
   static void Signal(string name){EventWaitHandle handle;if(EventWaitHandle.TryOpenExisting(name,out handle)){using(handle)handle.Set();}}
   static void DeleteTree(string path,string root){root=Normalize(root);path=Normalize(path);if(!path.StartsWith(root+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new IOException("Удаление за пределами папки приложения запрещено.");NoLinks(path);if(!Directory.Exists(path))return;foreach(string file in Directory.GetFiles(path)){NoLinks(file);DeleteFile(file);}foreach(string dir in Directory.GetDirectories(path)){NoLinks(dir);DeleteTree(dir,root);}Directory.Delete(path);}
   static void DeleteFile(string path){for(int attempt=0;attempt<40;attempt++){try{if(File.Exists(path)){File.SetAttributes(path,FileAttributes.Normal);File.Delete(path);}return;}catch(IOException){if(attempt==39)throw;Thread.Sleep(250);}catch(UnauthorizedAccessException){if(attempt==39)throw;Thread.Sleep(250);}}}
@@ -162,8 +229,11 @@ namespace WidgetLauncherSetup
    // Preflight every path before the first delete. Never follow junctions or symlinks.
    foreach(string file in marker.Files)NoLinks(Child(root,file));
    foreach(string id in marker.WidgetIds??new string[0]){if(!ValidId(id))throw new IOException("Некорректное имя виджета.");foreach(string parent in new[]{"Widgets","Data"})CheckTree(Child(root,parent+"\\"+id));}
-   if(!test){RemoveShortcuts(root);using(var key=Registry.CurrentUser.OpenSubKey(RegistryPath(root))){if(key!=null&&!String.Equals(key.GetValue("InstallLocation") as string,root,StringComparison.OrdinalIgnoreCase))throw new IOException("Запись установки относится к другой папке.");}Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(root),false);}
+   string hubSettings=Child(root,"Data\\hub-settings.json"),startupError=Child(root,"Data\\autostart-error.txt");NoLinks(hubSettings);NoLinks(startupError);
+   if(!test){RemoveShortcuts(root);RemoveAutostart(root);using(var key=Registry.CurrentUser.OpenSubKey(RegistryPath(root))){if(key!=null&&!String.Equals(key.GetValue("InstallLocation") as string,root,StringComparison.OrdinalIgnoreCase))throw new IOException("Запись установки относится к другой папке.");}Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(root),false);}
    foreach(string id in marker.WidgetIds??new string[0])foreach(string parent in new[]{"Widgets","Data"})DeleteTree(Child(root,parent+"\\"+id),root);
+   DeleteFile(hubSettings);
+   DeleteFile(startupError);
    // Keep the uninstaller available if a locked file prevents completing the operation.
    foreach(string file in marker.Files.OrderBy(f=>f.Equals("Uninstall.exe",StringComparison.OrdinalIgnoreCase)?1:0)){string target=Child(root,file);DeleteFile(target);}
    File.Delete(Child(root,MarkerName));RemoveEmptyDirectories(root);
@@ -171,14 +241,14 @@ namespace WidgetLauncherSetup
   static void CheckTree(string path){NoLinks(path);if(!Directory.Exists(path))return;foreach(string file in Directory.GetFiles(path))NoLinks(file);foreach(string dir in Directory.GetDirectories(path))CheckTree(dir);}
  }
 
- internal static class Ui
+ internal static partial class Ui
  {
   static PrivateFontCollection fonts;static IntPtr fontMemory;
   [DllImport("gdi32.dll")] static extern IntPtr AddFontMemResourceEx(IntPtr data,uint size,IntPtr reserved,ref uint count);
   public static readonly Color Background=Color.FromArgb(19,21,28),Panel=Color.FromArgb(29,32,42),Text=Color.FromArgb(239,239,246),Muted=Color.FromArgb(164,170,188),Accent=Color.FromArgb(180,154,255);
   public static Font Font(float size){if(fonts==null){fonts=new PrivateFontCollection();using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("Onest.ttf")){if(stream!=null){byte[] bytes=new byte[stream.Length];stream.Read(bytes,0,bytes.Length);fontMemory=Marshal.AllocCoTaskMem(bytes.Length);Marshal.Copy(bytes,0,fontMemory,bytes.Length);fonts.AddMemoryFont(fontMemory,bytes.Length);uint count=0;AddFontMemResourceEx(fontMemory,(uint)bytes.Length,IntPtr.Zero,ref count);}}}return new Font(fonts.Families.Length>0?fonts.Families[0]:SystemFonts.MessageBoxFont.FontFamily,size,FontStyle.Bold);}
   public static Label Label(string text,int x,int y,int width,int height,float size,Color color){return new Label{Text=text,Location=new Point(x,y),Size=new Size(width,height),Font=Font(size),ForeColor=color,BackColor=Color.Transparent};}
-  public static Button Button(string text,int x,int y,int width,bool primary){var b=new Button{Text=text,Location=new Point(x,y),Size=new Size(width,44),Font=Font(10),BackColor=primary?Accent:Panel,ForeColor=primary?Background:Text,FlatStyle=FlatStyle.Flat,Cursor=Cursors.Hand};b.FlatAppearance.BorderSize=0;return b;}
-  public static void Prepare(Form form){form.BackColor=Background;form.ForeColor=Text;form.Font=Font(10);form.AutoScaleMode=AutoScaleMode.Dpi;form.StartPosition=FormStartPosition.CenterScreen;form.FormBorderStyle=FormBorderStyle.FixedSingle;form.MaximizeBox=false;using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("Player.ico")){if(stream!=null)form.Icon=new Icon(stream);}}
+  public static Button Button(string text,int x,int y,int width,bool primary){return new RoundedButton{Text=text,Location=new Point(x,y),Size=new Size(width,44),Font=Font(10),BackColor=primary?Accent:Panel,ForeColor=primary?Background:Text,Cursor=Cursors.Hand};}
+  public static void Prepare(Form form){form.BackColor=Background;form.ForeColor=Text;form.Font=Font(10);form.AutoScaleMode=AutoScaleMode.Dpi;form.StartPosition=FormStartPosition.CenterScreen;form.FormBorderStyle=FormBorderStyle.None;form.MaximizeBox=false;AddChrome(form);using(var stream=Assembly.GetExecutingAssembly().GetManifestResourceStream("Player.ico")){if(stream!=null)form.Icon=new Icon(stream);}}
  }
 }

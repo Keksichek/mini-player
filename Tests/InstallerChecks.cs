@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text;
 using System.Web.Script.Serialization;
 using WidgetLauncherSetup;
+using File=WidgetLauncherSetup.HubFile;
+using Directory=WidgetLauncherSetup.HubDirectory;
 
 static class InstallerChecks
 {
@@ -34,10 +36,29 @@ static class InstallerChecks
  {
   try
   {
+   InstallEngine.ConfigureRuntime();
    scratch=Path.GetFullPath(args[0]);Directory.CreateDirectory(scratch);
+   var parent=NewRoot("Папка для приложений [hub]");
+   string target=InstallEngine.ResolveDestination(parent);
+   Check(target==Path.Combine(parent,"VibeWidgetsHub alpha"),"Selected parent gets the dedicated VibeWidgetsHub alpha folder");
+   Check(!Directory.Exists(parent),"Resolving installation folder does not create files");
+   Check(InstallEngine.ResolveDestination(target)==target,"Selecting hub folder itself does not nest another copy");
+   Write(Path.Combine(parent,"keep.txt"),"keep");Install(target,"hub");
+   Check(File.Exists(Path.Combine(target,"Launcher.exe")),"Launcher installs inside the automatically created hub folder");
+   Check(InstallEngine.ResolveDestination(parent)==target&&InstallEngine.ResolveDestination(target)==target,"Repeated installation resolves to the existing hub folder");
+   InstallEngine.Remove(target,true);Check(File.ReadAllText(Path.Combine(parent,"keep.txt"))=="keep","Removing hub preserves its selected parent and unrelated files");
+   Check(InstallEngine.ResolveDestination(Path.GetPathRoot(scratch))==Path.Combine(Path.GetPathRoot(scratch),InstallEngine.ProductName),"Selecting a drive root creates a dedicated subfolder");
+   Reject("Drive-relative selection is refused",()=>InstallEngine.ResolveDestination("C:relative"));
+   Reject("Relative parent selection is refused",()=>InstallEngine.ResolveDestination("relative"));
+   Reject("Network parent selection is refused",()=>InstallEngine.ResolveDestination(@"\\server\folder"));
+   string longParent=scratch;while(longParent.Length<240)longParent=Path.Combine(longParent,"Папка длинного пути");
+   string longRoot=InstallEngine.ResolveDestination(longParent);Install(longRoot,"long");
+   Check(File.Exists(Path.Combine(longRoot,"Runtime","dotnet.exe")),"Installer supports selected paths longer than 260 characters");
+   InstallEngine.Remove(longRoot,true);Check(!Directory.Exists(longRoot),"Uninstaller supports long selected paths");
    var root=NewRoot("Папка лаунчера [тест] с пробелами");Install(root,"v1");
    Check(File.ReadAllText(Path.Combine(root,"Launcher.dll"))=="v1","Install copies launcher to chosen Unicode folder");
    var marker=InstallEngine.ReadMarker(root);Check(marker.TestInstallation&&marker.InstallPath==root,"Installation ownership marker matches exact root");
+   Check(InstallEngine.ResolveDestination(root)==root,"Updating a previous custom installation keeps its existing location");
    Check(Directory.Exists(Path.Combine(root,"Widgets"))&&Directory.Exists(Path.Combine(root,"Data")),"Widgets and data folders live under launcher root");
    string settings=Path.Combine(root,"Data","mini-player","settings.json"),widget=Path.Combine(root,"Widgets","mini-player","App","MiniPlayer.dll");
    Write(settings,"settings");Write(widget,"widget");Write(Path.Combine(root,"personal.txt"),"personal");
@@ -69,6 +90,7 @@ static class InstallerChecks
    }
    var link=Path.Combine(scratch,"junction-root");Check(Directory.Exists(link),"Junction test fixture exists");
    Reject("Installer refuses junction destination",()=>Install(link,"bad"));
+   Reject("Installer refuses junction parent selection",()=>InstallEngine.ResolveDestination(link));
    Check(File.ReadAllText(Path.Combine(scratch,"junction-target","keep.txt"))=="keep","Junction target remains intact");
 
    var markerPath=Path.Combine(root,InstallEngine.MarkerName);string original=File.ReadAllText(markerPath);var json=new JavaScriptSerializer();
