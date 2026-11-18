@@ -25,6 +25,17 @@ FILTERS = ("Все", "Активные", "Готовые")
 class NotesApp:
     def __init__(self, root, store, reminders, *, hidden=False):
         self.root, self.store, self.reminders = root, store, reminders
+        for option, value in {
+            "*Button.background": "#F1ECE6", "*Button.foreground": "#302923",
+            "*Button.disabledForeground": "#645A51", "*Button.activeBackground": "#E2D7CA",
+            "*Button.activeForeground": "#302923", "*Label.foreground": "#302923",
+            "*Entry.background": "#FFFFFF", "*Entry.foreground": "#302923",
+            "*Entry.insertBackground": "#302923", "*Spinbox.background": "#FFFFFF",
+            "*Spinbox.foreground": "#302923", "*Menu.foreground": "#302923",
+            "*Menu.background": "#F1ECE6", "*Text.foreground": "#302923",
+            "*Text.background": "#FFFFFF",
+        }.items():
+            root.option_add(option, value)
         self.settings = store.path.with_name("settings.json")
         self.theme = "light"
         try:
@@ -49,11 +60,15 @@ class NotesApp:
 
     def button(self, parent, text, command, *, surface="card", color="ink", padx=10):
         button = tk.Button(parent, text=text, command=command, font=("Segoe UI", 9),
-                           bg=self.c[surface], fg=self.c[color], activebackground=self.c["line"],
+                           bg=self.c[surface], fg=self.c[color], disabledforeground=self.c[color],
+                           activebackground=self.c["line"],
                            activeforeground=self.c["ink"], relief="flat", bd=0, padx=padx, pady=6,
                            cursor="hand2", highlightthickness=1, highlightbackground=self.c[surface],
                            highlightcolor=self.c["accent"])
-        button.bind("<Enter>", lambda _: button.configure(bg=self.c["line"], fg=self.c["ink"]))
+        button.bind("<Enter>", lambda _: button.configure(
+            bg=self.c[surface] if surface == "accent" else self.c["line"],
+            fg=self.c[color] if surface == "accent" else self.c["ink"])
+                    if button.cget("state") != "disabled" else None)
         button.bind("<Leave>", lambda _: button.configure(bg=self.c[surface], fg=self.c[color]))
         def activate(_event):
             button.invoke()
@@ -87,6 +102,10 @@ class NotesApp:
 
         area = tk.Frame(self.sheet, bg=self.c["paper"], padx=17, pady=10)
         area.pack(fill="both", expand=True)
+        safety = tk.Frame(area, bg=self.c["paper"])
+        safety.pack(fill="x", pady=(0, 4))
+        self.button(safety, "⚠ Удалить приложение", self.uninstall_app,
+                    surface="paper", color="accent", padx=5).pack(side="right")
         header = tk.Frame(area, bg=self.c["paper"])
         header.pack(fill="x", pady=(0, 14))
         header.columnconfigure(0, weight=1)
@@ -128,8 +147,6 @@ class NotesApp:
                     padx=5).pack(side="left", padx=(0, 5))
         self.button(management, "Удалить все уведомления", self.remove_all_reminders,
                     color="accent", padx=5).pack(side="left")
-        self.button(area, "Удалить приложение", self.uninstall_app,
-                    surface="paper", color="muted", padx=5).pack(side="bottom", anchor="e")
         self.progress = self.label(area, "", color="muted", size=9)
         self.progress.pack(side="bottom", anchor="w", pady=(8, 0))
         viewport = tk.Frame(area, bg=self.c["paper"])
@@ -495,10 +512,9 @@ class NotesApp:
                            highlightthickness=1, highlightbackground=self.c["line"],
                            selectbackground=self.c["accent"], selectforeground=self.c["white"],
                            font=("Segoe UI", 10))
-        scroll = tk.Scrollbar(frame, command=items.yview)
-        scroll.pack(side="right", fill="y")
-        items.configure(yscrollcommand=scroll.set)
-        items.pack(fill="both", expand=True)
+        items.pack(fill="both", expand=True, padx=(0, 12))
+        scroll = HoverScrollbar(frame, items, self.c["paper"], self.c["scroll"])
+        scroll.track.bind("<MouseWheel>", lambda e: items.yview_scroll(-int(e.delta / 120), "units"))
         choices = []
         for block in self.store.tasks:
             name = block.title or self.short_text(block.text)

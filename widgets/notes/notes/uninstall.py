@@ -7,12 +7,13 @@ import subprocess
 import sys
 import tempfile
 from notes.windows import set_startup
+from notes.install_paths import shortcuts
 
 FILES = ("app.py", "launch.bat", "Запустить заметки.bat", "Заметки.lnk", "notes.ico",
-         "README.md", ".gitignore", "build.ps1")
+         "README.md", ".gitignore", "build.ps1", "installer.py")
 MODULES = ("__init__.py", "convert_audio.ps1", "date_picker.py", "drawing.py", "model.py",
            "reminder-default.wav", "reminders.py", "scrollbar.py", "sound.py", "sticky.py",
-           "ui.py", "windows.py", "uninstall.py")
+           "ui.py", "windows.py", "uninstall.py", "install_paths.py")
 
 
 def targets(folder, frozen):
@@ -23,7 +24,8 @@ def targets(folder, frozen):
         exe = Path(sys.executable).resolve()
         if exe.parent != folder or not (folder / "_internal" / "notes.ico").is_file():
             raise ValueError("Папка EXE не похожа на установленный виджет.")
-        paths = [exe, folder / "_internal", folder / "data", folder / "README.md"]
+        paths = [exe, folder / "_internal", folder / "data", folder / "README.md",
+                 folder / "installation.json"]
     else:
         if not (folder / "app.py").is_file() or not (folder / "notes" / "model.py").is_file():
             raise ValueError("Не удалось найти файлы виджета.")
@@ -39,7 +41,14 @@ def targets(folder, frozen):
 def uninstall(folder):
     folder = folder.resolve()
     paths = targets(folder, getattr(sys, "frozen", False))
-    payload = b64encode(json.dumps({"folder": str(folder), "paths": [str(p) for p in paths]},
+    links = []
+    marker = folder / "installation.json"
+    if marker.is_file():
+        installed = json.loads(marker.read_text(encoding="utf-8"))
+        allowed = {str(link) for link in shortcuts()}
+        links = [path for path in installed.get("links", []) if path in allowed]
+    payload = b64encode(json.dumps({"folder": str(folder), "paths": [str(p) for p in paths],
+                                   "links": links},
                                   ensure_ascii=False).encode("utf-8")).decode("ascii")
     helper = r"""
 $ErrorActionPreference = 'Stop'
@@ -54,6 +63,11 @@ if (Get-Process -Id __PID__ -ErrorAction SilentlyContinue) {
     Wait-Process -Id __PID__ -Timeout 30 -ErrorAction SilentlyContinue
 }
 if (Get-Process -Id __PID__ -ErrorAction SilentlyContinue) { exit 3 }
+foreach ($link in $data.links) {
+    if (Test-Path -LiteralPath $link -PathType Leaf) {
+        Remove-Item -LiteralPath $link -Force -ErrorAction SilentlyContinue
+    }
+}
 $success = $false
 for ($attempt = 0; $attempt -lt 20; $attempt++) {
     foreach ($path in $paths) {
