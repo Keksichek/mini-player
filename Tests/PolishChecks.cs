@@ -90,7 +90,7 @@ internal static class PolishChecks
    var canDrag=playerType.GetProperty("CanDragPlayer",Instance);
    if(canDrag!=null){Set("movementLocked",true);Check(!(bool)canDrag.GetValue(player)!,"Locked player rejects drag initiation");Set("movementLocked",false);Check((bool)canDrag.GetValue(player)!,"Unlocked player accepts drag initiation");}
    var icons=assembly.GetType("MiniPlayer.PlayerIcons",true)!;
-   CheckGlyph(icons,"Pin",false,true);CheckGlyph(icons,"MovementLock",false,true);
+   CheckGlyph(icons,"Pin",false,true);CheckGlyph(icons,"MovementLock",false,true);CheckGlyph(icons,"ClickThrough",false,true);
    var repeatMethod=icons.GetMethods(Static).Single(x=>x.Name=="Repeat");
    var repeatType=repeatMethod.GetParameters()[0].ParameterType;
    var none=Enum.Parse(repeatType,"None");var list=Enum.Parse(repeatType,"List");var track=Enum.Parse(repeatType,"Track");
@@ -102,7 +102,7 @@ internal static class PolishChecks
     File.WriteAllText(Path.Combine(scratch,"appearance.json"),JsonSerializer.Serialize(new{Theme=theme,Accent="#8BE878"}));Invoke("LoadAppearance");
     var root=(FrameworkElement)window.Content;Layout(root,window.Width,window.Height);
     var face=(Canvas)Field("deviceFace")!;
-    var utilities=new[]{"facePin","faceLock","faceRepeat","faceMenu","faceHide"}.Select(x=>(Button)Field(x)!).ToArray();
+    var utilities=new[]{"facePin","faceLock","faceClickThrough","faceRepeat","faceMenu","faceHide"}.Select(x=>(Button)Field(x)!).ToArray();
     var rects=utilities.Select(x=>Bounds(x,face)).ToArray();
     Check(rects.All(x=>x.Width>=19&&x.Height>=19&&x.Left>=-.01&&x.Top>=-.01&&x.Right<=face.Width+.01&&x.Bottom<=face.Height+.01),theme+" utility buttons fit inside player");
     Check(rects.SelectMany((rect,i)=>rects.Skip(i+1).Select(other=>Rect.Intersect(rect,other))).All(x=>x.IsEmpty||x.Width*x.Height<.01),theme+" utility buttons do not overlap");
@@ -129,7 +129,7 @@ internal static class PolishChecks
     var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(image));using var output=File.Create(Path.Combine(scratch,name));png.Save(output);
    }
    SnapshotSettings("settings-source.png");
-   Check(nodes.OfType<ComboBox>().Count()==1,"Settings retain source selector without mixer application selector");
+   Check(nodes.OfType<ComboBox>().Contains((ComboBox)Field("sources")!)&&!nodes.OfType<TextBlock>().Any(x=>x.Text.Contains("Приложение в микшере")),"Settings retain source selector without mixer application selector");
    Check(((ComboBox)Field("sources")!).IsEnabled,"Source picker remains interactive when no sessions are available");
    Check(nodes.OfType<Button>().Any(x=>x.Content as string=="Обновить"),"Source list can be refreshed manually");
    Check(nodes.OfType<Slider>().Any(x=>ReferenceEquals(x,Field("volumeSlider"))),"Settings retain automatic source volume control");
@@ -186,7 +186,7 @@ internal static class PolishChecks
    var repeat=(Button)Field("repeat")!;
    Check(!repeat.IsEnabled,"Repeat starts disabled without supported media source");
    if(args.Length>1){
-    string payload=Path.GetFullPath(args[1]);const string version="0.19999999999999999999999999999999";
+    string payload=Path.GetFullPath(args[1]);const string version="0.3";
     using(var catalog=JsonDocument.Parse(File.ReadAllText(Path.Combine(payload,"Catalog","widgets.json"))))Check(catalog.RootElement[0].GetProperty("Version").GetString()=="0.1","Catalog identifies player as 0.1");
     var launcherAssembly=Assembly.LoadFrom(Path.Combine(payload,"Launcher.dll"));
     Check(launcherAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion==version,"Launcher informational version keeps all digits");

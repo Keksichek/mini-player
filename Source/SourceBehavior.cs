@@ -25,7 +25,7 @@ public sealed partial class Player
   if(!shouldShow.HasValue)return;
   if(previousSourceVisibility.HasValue&&previousSourceVisibility!=shouldShow)shownByUser=false;
   previousSourceVisibility=shouldShow;
-  if(shownByUser)return;
+  if(shownByUser || (shouldShow.Value && SuppressPauseDisplay))return;
   if(shouldShow.Value&&!IsVisible){bool activate=ShowActivated;ShowActivated=false;Show();ShowActivated=activate;}
   else if(!shouldShow.Value&&IsVisible)Hide();
   }catch{ /* Source windows and media sessions may disappear between polls. */ }

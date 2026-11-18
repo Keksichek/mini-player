@@ -46,7 +46,28 @@ static class InstallerChecks
    Write(Path.Combine(parent,"keep.txt"),"keep");Install(target,"hub");
    Check(File.Exists(Path.Combine(target,"Launcher.exe")),"Launcher installs inside the automatically created hub folder");
    Check(InstallEngine.ResolveDestination(parent)==target&&InstallEngine.ResolveDestination(target)==target,"Repeated installation resolves to the existing hub folder");
+   var workshop=Path.Combine(target,"Data","Customization","mini-player");
+   string presetId=Guid.NewGuid().ToString("N");
+   Write(Path.Combine(workshop,"active.json"),"{}");Write(Path.Combine(workshop,"draft.json"),"{}");
+   Write(Path.Combine(workshop,"Presets",presetId+".json"),"{}");
+   Write(Path.Combine(workshop,"Media",new string('a',64)+".png"),"test image");
    InstallEngine.Remove(target,true);Check(File.ReadAllText(Path.Combine(parent,"keep.txt"))=="keep","Removing hub preserves its selected parent and unrelated files");
+   Check(!Directory.Exists(target),"Complete uninstall removes presets, active selection, draft and imported backgrounds");
+   Install(InstallEngine.ResolveDestination(parent),"hub");InstallEngine.Remove(target,true);
+   Write(Path.Combine(workshop,"Presets",presetId+".json"),"legacy preset");
+   Install(InstallEngine.ResolveDestination(parent),"hub");
+   Check(File.ReadAllText(Path.Combine(workshop,"Presets",presetId+".json"))=="legacy preset","Reinstall recovers the known preset remainder from an older uninstaller");
+   string note=Path.Combine(workshop,"Presets","my-notes.json");Write(note,"personal");
+   InstallEngine.Remove(target,true);Check(File.ReadAllText(note)=="personal","Unrelated files inside preset folders survive uninstall");
+   string afterRollback=Path.Combine(NewRoot("Retained recovery files"),InstallEngine.ProductName);
+   string recoveryFile=Path.Combine(afterRollback,".update-preserved-"+Guid.NewGuid().ToString("N"),"Data","personal-backup.txt");
+   Write(recoveryFile,"retained data");Install(InstallEngine.ResolveDestination(afterRollback),"hub");InstallEngine.Remove(afterRollback,true);
+   Check(File.ReadAllText(recoveryFile)=="retained data","A retained rollback backup permits reinstall and survives the next uninstall");
+   Write(Path.Combine(afterRollback,"Data","Customization","mini-player","active.json"),"{}");
+   Install(InstallEngine.ResolveDestination(afterRollback),"hub");InstallEngine.Remove(afterRollback,true);
+   Check(File.ReadAllText(recoveryFile)=="retained data","Legacy workshop residues and a valid backup can coexist on reinstall");
+   Write(Path.Combine(afterRollback,"personal.txt"),"keep");
+   Reject("Known backup cannot authorize adoption of unrelated top-level files",()=>InstallEngine.ResolveDestination(afterRollback));
    Check(InstallEngine.ResolveDestination(Path.GetPathRoot(scratch))==Path.Combine(Path.GetPathRoot(scratch),InstallEngine.ProductName),"Selecting a drive root creates a dedicated subfolder");
    Reject("Drive-relative selection is refused",()=>InstallEngine.ResolveDestination("C:relative"));
    Reject("Relative parent selection is refused",()=>InstallEngine.ResolveDestination("relative"));
@@ -67,6 +88,21 @@ static class InstallerChecks
    Check(File.ReadAllText(settings)=="settings"&&File.ReadAllText(widget)=="widget","Updating preserves installed widget and settings");
    using(var held=new FileStream(Path.Combine(root,"Launcher.dll"),FileMode.Open,FileAccess.Read,FileShare.Read))Reject("Locked file aborts update",()=>Install(root,"v3"));
    Check(File.ReadAllText(Path.Combine(root,"Launcher.exe"))=="v2"&&File.ReadAllText(Path.Combine(root,"Launcher.dll"))=="v2","Failed update restores files already replaced");
+   string interrupted=NewRoot("rollback-busy");Install(interrupted,"original");
+   FileStream busyReplacement=null;
+   try{
+    using(var payload=Package("replacement")){
+     Reject("Rollback reports a busy replacement",delegate{InstallEngine.Install(payload,interrupted,true,delegate(int n,string label){
+      if(n<=72||n>=92||!File.Exists(Path.Combine(interrupted,"Launcher.dll"))||File.ReadAllText(Path.Combine(interrupted,"Launcher.dll"))!="replacement")return;
+      busyReplacement=new FileStream(Path.Combine(interrupted,"Launcher.exe"),FileMode.Open,FileAccess.Read,FileShare.Read);
+      throw new IOException("Injected installer failure after replacement");
+     });});
+    }
+    Check(busyReplacement!=null,"Installer failure occurs with newly replaced launcher locked");
+    var preserved=Directory.GetDirectories(interrupted).Single(dir=>Path.GetFileName(dir).StartsWith(".install-",StringComparison.Ordinal));
+    Check(File.ReadAllText(Path.Combine(preserved,"old","Launcher.exe"))=="original","A failed rollback retains the original locked component backup");
+    Check(File.ReadAllText(Path.Combine(interrupted,"Launcher.dll"))=="original","Rollback restores other components despite a locked counterpart");
+   }finally{if(busyReplacement!=null)busyReplacement.Dispose();}
    Check(InstallEngine.ReadMarker(root).InstallPath==root&&File.ReadAllText(settings)=="settings","Failed update preserves marker and settings");
    Write(Path.Combine(root,"extra.txt"),"user file");Reject("Update refuses collision with unowned file",()=>Install(root,"v3","extra.txt"));
    Check(File.ReadAllText(Path.Combine(root,"extra.txt"))=="user file","User file survives rejected update");
@@ -101,7 +137,10 @@ static class InstallerChecks
    Reject("Removal refuses paths outside manifest root",()=>InstallEngine.Remove(root,true));File.WriteAllText(markerPath,original);
    Check(File.Exists(Path.Combine(root,"Launcher.exe"))&&File.Exists(settings),"Malformed removal manifest deletes nothing");
    Write(Path.Combine(root,"Widgets","unrelated","keep.txt"),"other");
+   Write(Path.Combine(root,"Widgets","clock",".widget-install.json"),"{\"Id\":\"clock\",\"Executable\":\"App/Clock.exe\"}");
+   Write(Path.Combine(root,"Data","clock","settings.json"),"{}");
    InstallEngine.Remove(root,true);
+   Check(!Directory.Exists(Path.Combine(root,"Widgets","clock"))&&!Directory.Exists(Path.Combine(root,"Data","clock")),"Uninstall discovers an installed widget omitted by an older catalog update");
    Check(!File.Exists(Path.Combine(root,"Launcher.exe"))&&!File.Exists(markerPath),"Uninstall removes owned launcher files and marker");
    Check(!File.Exists(settings)&&!File.Exists(widget),"Uninstall removes catalog widget and its settings");
    Check(File.ReadAllText(Path.Combine(root,"personal.txt"))=="personal"&&File.ReadAllText(Path.Combine(root,"extra.txt"))=="user file","Uninstall preserves unrelated root files");

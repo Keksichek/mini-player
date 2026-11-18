@@ -33,17 +33,21 @@ public sealed partial class Player
    label.Foreground,VisualTreeHelper.GetDpi(label).PixelsPerDip);
   return text.WidthIncludingTrailingWhitespace>label.ActualWidth;
  }
- static void EnableFullTitle(TextBlock label){
+ void EnableFullTitle(TextBlock label){
+  EnableSourcePicker(label);
   var fullText=new TextBlock{MaxWidth=Math.Min(480,SystemParameters.WorkArea.Width*.8),TextWrapping=TextWrapping.Wrap};
   fullText.SetBinding(TextBlock.TextProperty,new Binding(nameof(TextBlock.Text)){Source=label});
-  label.ToolTip=new ToolTip{Content=fullText};
+  var hint=new StackPanel();hint.Children.Add(fullText);
+  hint.Children.Add(new TextBlock{Text="Нажмите, чтобы сменить источник",FontSize=11});
+  label.ToolTip=new ToolTip{Content=hint};
   ToolTipService.SetInitialShowDelay(label,350);
   ToolTipService.SetShowDuration(label,60000);
-  label.ToolTipOpening+=(_,e)=>{if(!TitleIsClipped(label))e.Handled=true;};
+  label.ToolTipOpening+=(_,_)=>fullText.Visibility=TitleIsClipped(label)?Visibility.Visible:Visibility.Collapsed;
  }
  void TogglePin(){Topmost=!Topmost;UpdatePin();Save();}
- void HidePlayer(){shownByUser=true;Hide();}
+ void HidePlayer(){ManualPauseVisibility();shownByUser=true;Hide();}
  void UpdateFacePin(){
+  if(customSurface!=null){UpdateCustomPresetState();return;}
   if(facePin==null)return;
   bool lcd=appearance.Theme=="Карманный LCD",sun=appearance.Theme=="Закат";
   var ink=BrushOf(Topmost?(lcd?"#DCF3B1":sun?"#923917":"#542437"):(lcd?"#C8CFC7":"#50464B"));
@@ -59,6 +63,7 @@ public sealed partial class Player
   System.Windows.Automation.AutomationProperties.SetName(facePin,(Topmost?"Закреплён. ":"Откреплён. ")+facePin.ToolTip);
  }
  void UpdateFaceLock(){
+  if(customSurface!=null){UpdateCustomPresetState();return;}
   if(faceLock==null)return;
   faceLock.Content=PlayerIcons.MovementLock(movementLocked,movementLocked?AccentInk(appearance.Accent):faceLock.Foreground);
   faceLock.ToolTip=movementLocked?"Перемещение заблокировано — нажмите, чтобы разрешить":"Окно можно перемещать — нажмите, чтобы заблокировать";
@@ -66,6 +71,7 @@ public sealed partial class Player
   System.Windows.Automation.AutomationProperties.SetName(faceLock,movementLocked?"Разрешить перемещение плеера":"Запретить перемещение плеера");
  }
  void UpdateFaceRepeat(){
+  if(customSurface!=null){UpdateCustomPresetState();return;}
   if(faceRepeat==null)return;
   faceRepeat.Content=PlayerIcons.Repeat(repeatMode,repeatMode==Windows.Media.MediaPlaybackAutoRepeatMode.None?faceRepeat.Foreground:AccentInk(appearance.Accent));
   faceRepeat.Background=repeatMode==Windows.Media.MediaPlaybackAutoRepeatMode.None?UtilitySurface():BrushOf(appearance.Accent);
@@ -100,7 +106,7 @@ public sealed partial class Player
   if(platterRotation!=null)platterRotation.Angle=seconds*45%360;
   else if(activeMeter!=null&&activeMeter.Animated){activeMeter.Phase=seconds*2;activeMeter.InvalidateVisual();}
  }
- void SetMediaPlaying(bool playing){mediaPlaying=playing;SyncMotion();}
+ void SetMediaPlaying(bool playing){mediaPlaying=playing;UpdateCustomPresetState();SyncMotion();}
  static Brush SceneShade(string theme){
   var color=(Color)ColorConverter.ConvertFromString(theme switch{
    "Лаванда"=>"#3A2547","Лес"=>"#0C261D","Minecraft"=>"#23311D",
@@ -129,7 +135,7 @@ public sealed partial class Player
   bool sceneBackground=studio?.SceneIsBackground==true;
   body.Padding=sceneBackground?new Thickness(0):new Thickness(8);
   stack.Children[0].Visibility=stack.Children[1].Visibility=Visibility.Collapsed;
-  peakReader.Dispose();facePin=null;faceLock=null;faceRepeat=null;faceMenu=null;faceHide=null;platterRotation=null;activeMeter=null;sceneMotion=null;
+  peakReader.Dispose();facePin=null;faceLock=null;faceRepeat=null;faceMenu=null;faceHide=null;faceClickThrough=null;platterRotation=null;activeMeter=null;sceneMotion=null;
 
   Brush B(string c)=>BrushOf(c);
   LinearGradientBrush Gradient(string first,string last,double angle=90)=>new((Color)ColorConverter.ConvertFromString(first),(Color)ColorConverter.ConvertFromString(last),angle);
@@ -298,7 +304,7 @@ public sealed partial class Player
   meter.LostMouseCapture+=(_,_)=>seeking=false;
   meter.KeyDown+=async(_,e)=>{if(!seek.IsEnabled||e.Key is not (System.Windows.Input.Key.Left or System.Windows.Input.Key.Right))return;seekTrack=track;seek.Value+=e.Key==System.Windows.Input.Key.Left?-5:5;e.Handled=true;await Seek();};
   double size=vinyl||lcd?20:24,gap=vinyl||lcd?3:4;
-  double rowX=vinyl?199:lcd?122:face.Width-(4*size+3*gap)-8;
+  double rowX=vinyl?197:lcd?114:face.Width-(5*size+4*gap)-8;
   double rowY=vinyl?89:lcd?94:sceneBackground?10:2;
   var utilityInk=lcd?B("#DCF3B1"):studio!=null&&!sceneBackground?AccentInk(studio.Key):ink;
   Button Utility(int column,string hint,Action? action=null){
@@ -312,10 +318,11 @@ public sealed partial class Player
   faceRepeat.SetBinding(IsEnabledProperty,new Binding("IsEnabled"){Source=repeat});
   faceRepeat.SetBinding(ToolTipProperty,new Binding("ToolTip"){Source=repeat});
   ToolTipService.SetShowOnDisabled(faceRepeat,true);
-  faceHide=Utility(2,"Скрыть плеер",HidePlayer);faceHide.Content=PlayerIcons.Eye(utilityInk);
-  var more=faceMenu=Utility(3,"Меню плеера");more.Content=PlayerIcons.ContextMenu(utilityInk);
+  faceClickThrough=Utility(2,EnablePassThrough,ToggleClickThrough);
+  faceHide=Utility(3,"Скрыть плеер",HidePlayer);faceHide.Content=PlayerIcons.Eye(utilityInk);
+  var more=faceMenu=Utility(4,"Меню плеера");more.Content=PlayerIcons.ContextMenu(utilityInk);
   face.ContextMenu=AttachPlayerMenu(more);
-  UpdateFacePin();UpdateFaceLock();UpdateFaceRepeat();
+  UpdateFacePin();UpdateFaceLock();UpdateFaceRepeat();UpdateClickThroughButtons();
   AddVolumeFooter(face,originalHeight,ink,sceneBackground);
 
  }

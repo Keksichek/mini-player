@@ -59,6 +59,18 @@ static class UpdateEngineChecks
    Check(System.IO.File.ReadAllText(P(root,"Мои заметки.txt"))=="Keep this root note"&&System.IO.File.ReadAllText(P(root,"Widgets/mini-player/Мои заметки.txt"))=="Keep this widget note","Root and widget user files are preserved");
    Check(!UpdateEngine.Pending(root)&&!System.IO.Directory.Exists(P(root,UpdateEngine.TransactionName)),"Successful health confirmation cleans the transaction");
    Reject(delegate{Apply(root,feed,Healthy,null);},"Same or lower build cannot be installed");
+   string expanded=Feed("Expanded catalog",11,delegate(string payload){
+    string catalog=Catalog();
+    Put(payload,"Catalog/widgets.json",catalog.Substring(0,catalog.Length-1)+",{\"Id\":\"clock\",\"Name\":\"Clock\",\"Executable\":\"App/Clock.exe\",\"Package\":\"clock.zip\",\"Available\":true,\"Version\":\"0.1\"}]");
+    using(var archive=ZipFile.Open(P(payload,"Packages/clock.zip"),ZipArchiveMode.Create))
+    using(var image=archive.CreateEntry("App/Clock.exe").Open())image.WriteByte(42);
+   });
+   string expandedRoot=Fixture("New catalog widget");Apply(expandedRoot,expanded,Healthy,null);
+   Check(InstallEngine.ReadMarker(expandedRoot).WidgetIds.Contains("clock"),"Update records a new catalog widget before its first installation");
+   ZipFile.ExtractToDirectory(P(expandedRoot,"Packages/clock.zip"),P(expandedRoot,"Widgets/clock"));
+   Put(expandedRoot,"Widgets/clock/.widget-install.json","{\"Id\":\"clock\",\"Executable\":\"App/Clock.exe\"}");
+   Put(expandedRoot,"Data/clock/settings.json","{}");InstallEngine.Remove(expandedRoot,true);
+   Check(!System.IO.Directory.Exists(P(expandedRoot,"Widgets/clock"))&&!System.IO.Directory.Exists(P(expandedRoot,"Data/clock")),"Complete uninstall also removes a widget installed after a catalog update");
    string bad=Fixture("Failed health"),baseline=String.Join("\n",Data(bad));var failed=Apply(bad,feed,delegate(string r,string[] ids){Put(r,"Data/mini-player/settings.json","candidate schema");Put(r,"Data/new-setting.txt","new data");return false;},null);
    Check(failed.RolledBack&&!failed.Updated&&UpdateEngine.CurrentBuild(bad)==0,"Unhealthy update rolls back its version state");
    Check(Hash(P(bad,"Launcher.dll"))==Hash(typeof(ZipArchive).Assembly.Location)&&Hash(P(bad,"Widgets/mini-player/App/MiniPlayer.dll"))==Hash(typeof(ZipArchive).Assembly.Location),"Failed health restores launcher and widget binaries");

@@ -16,6 +16,8 @@ static class HotkeyVolumeChecks
  const BindingFlags Static=BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Static;
  static Type type=null!;static object player=null!;static int count;
  [DllImport("user32.dll")]static extern bool PostMessage(IntPtr window,int message,IntPtr wParam,IntPtr lParam);
+ [DllImport("user32.dll")]static extern IntPtr WindowFromPoint(System.Drawing.Point point);
+ [DllImport("user32.dll",EntryPoint="GetWindowLongW")]static extern int ReadStyle(IntPtr window,int index);
  static object? Field(string name)=>type.GetField(name,Instance)!.GetValue(player);
  static void Set(string name,object? value)=>type.GetField(name,Instance)!.SetValue(player,value);
  static object? Call(string name,params object?[] args)=>type.GetMethod(name,Instance)!.Invoke(player,args);
@@ -58,7 +60,7 @@ static class HotkeyVolumeChecks
    var native=new WindowInteropHelper((Window)player);native.EnsureHandle();
    var bindingType=type.GetNestedType("HotkeyBinding",BindingFlags.NonPublic)!;
    var modifiers=System.Windows.Input.ModifierKeys.Control|System.Windows.Input.ModifierKeys.Alt|System.Windows.Input.ModifierKeys.Shift;
-   string[] newActions={"Hide","Show","LockMovement","UnlockMovement"};
+   string[] newActions={"Hide","Show","LockMovement","UnlockMovement","EnableClickThrough","DisableClickThrough"};
    for(int i=0;i<newActions.Length;i++){
     var action=Enum.Parse(actions,newActions[i]);var key=(System.Windows.Input.Key)((int)System.Windows.Input.Key.F17+i);
     object binding=Activator.CreateInstance(bindingType,Instance,null,new object[]{modifiers,key},null)!;
@@ -76,6 +78,17 @@ static class HotkeyVolumeChecks
    Send("Hide");Check(!((Window)player).IsVisible&&(bool)Field("shownByUser")!,"Hide hotkey suppresses automatic reappearance");
    Send("LockMovement");Check((bool)Field("movementLocked")!,"Native lock hotkey locks movement");
    Send("UnlockMovement");Check(!(bool)Field("movementLocked")!,"Native unlock hotkey unlocks movement");
+   var foreground=(Window)player;var work=SystemParameters.WorkArea;
+   var underneath=new Window{Left=work.Left+20,Top=work.Top+20,Width=foreground.Width+40,Height=foreground.Height+40,ShowInTaskbar=false,ShowActivated=false,Topmost=true,WindowStyle=WindowStyle.None,Background=System.Windows.Media.Brushes.White};
+   try{
+    underneath.Show();foreground.Left=underneath.Left+10;foreground.Top=underneath.Top+10;foreground.Topmost=true;foreground.Show();Pump();
+    var pin=(Button)Field("facePin")!;var pixel=pin.PointToScreen(new Point(pin.ActualWidth/2,pin.ActualHeight/2));
+    var point=new System.Drawing.Point((int)pixel.X,(int)pixel.Y);
+    Check(WindowFromPoint(point)==native.Handle,"Windows initially hit-tests the visible widget button");
+    Send("EnableClickThrough");Check((bool)Field("clickThrough")!&&(ReadStyle(native.Handle,-20)&0x20)!=0,"Global hotkey lets Windows pass clicks through the layered player");
+    Check(WindowFromPoint(point)==new WindowInteropHelper(underneath).Handle,"Windows hit-tests the separate window beneath the widget at the same point");
+    Send("DisableClickThrough");Check(!(bool)Field("clickThrough")!&&(ReadStyle(native.Handle,-20)&0x20)==0&&WindowFromPoint(point)==native.Handle,"Global hotkey restores native mouse input at that point");
+   }finally{underneath.Close();}
    Console.WriteLine("TOTAL "+count+" PASS");return 0;
   }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
   finally{if(player!=null){try{Set("closing",true);((Window)player).Close();}catch{}}if(application!=null)application.Shutdown();}

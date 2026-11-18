@@ -26,6 +26,9 @@ internal static class RelocationChecks
  static RelocationResult Move(string source,string parent,Action<int,string> progress){return RelocationEngine.Relocate(source,parent,true,progress);}
  static void Ignore(int n,string s){}
  static int Main(string[] args){
+  if(args.Length==3&&args[1]=="--resume-widgets"&&Path.GetFileName(args[0])=="Launcher.dll"&&args[2]=="mini-player,clock"){
+   File.WriteAllText(Path.Combine(Path.GetDirectoryName(args[0]),"resume-observed.txt"),args[0]+"\n"+args[2]);return 0;
+  }
   try{InstallEngine.ConfigureRuntime();root=InstallEngine.Normalize(args[0]);Directory.CreateDirectory(root);
    Check(RelocateProgram.QuoteArgument(@"D:\")=="\"D:\\\\\"","Handoff quoting preserves a selected drive root");
    string first=Fixture("Начальная папка [проверка]");string destination=Child(root,"Другая папка [кириллица]");var moved=Move(first,destination,Ignore);string target=Child(destination,InstallEngine.ProductName);
@@ -41,6 +44,17 @@ internal static class RelocationChecks
    string occupied=Child(Child(root,"Occupied"),InstallEngine.ProductName);Put(occupied,"user.txt","Do not touch");string occupiedSource=Fixture("Occupied source");Reject(delegate{Move(occupiedSource,Path.GetDirectoryName(occupied),Ignore);},"Occupied destination rejected");Check(File.ReadAllText(Child(occupied,"user.txt"))=="Do not touch"&&File.Exists(Child(occupiedSource,"Launcher.dll")),"Occupied destination and source preserved");
    string changing=Fixture("Changing");string changingParent=Child(root,"Changing target");Reject(delegate{Move(changing,changingParent,delegate(int n,string s){if(n==74)Put(changing,"Data\\mini-player\\settings.json","newer data");});},"Source writes during copy abort safely");Check(File.ReadAllText(Child(changing,"Data\\mini-player\\settings.json"))=="newer data"&&!Directory.Exists(Child(changingParent,InstallEngine.ProductName)),"Latest source data survives interrupted relocation");
    string growing=Fixture("Growing");Reject(delegate{Move(growing,Child(root,"Growing target"),delegate(int n,string s){if(n==74)Put(growing,"new-file.txt","created while moving");});},"New source files during copy abort safely");Check(File.Exists(Child(growing,"new-file.txt")),"Concurrent new file retained");
+   string resumeRoot=null;int restartCount=0;
+   Action<string> resume=delegate(string directory){resumeRoot=directory;restartCount++;};
+   Reject(delegate{RelocationEngine.Relocate(growing,Child(root,"Resume target"),true,delegate(int n,string s){if(n==74)throw new IOException("Copy interrupted");},resume);},"Interrupted copy reports failure");
+   Check(restartCount==1&&resumeRoot==growing,"Failure after shutdown restarts the original installation once");
+   Reject(delegate{RelocationEngine.Relocate(growing,growing,true,Ignore,resume);},"Invalid destination is rejected before shutdown");
+   Check(restartCount==1,"Failure before shutdown does not start an extra launcher");
+   string launchProbe=Fixture("Проверка запуска"),observed=Child(launchProbe,"resume-observed.txt");
+   File.Copy(typeof(RelocationChecks).Assembly.Location,Child(launchProbe,@"Runtime\dotnet.exe"),true);
+   RelocateProgram.ResumeLauncher(launchProbe,new[]{"mini-player","clock"});
+   for(int i=0;i<100&&!File.Exists(observed);i++)System.Threading.Thread.Sleep(50);
+   Check(File.Exists(observed)&&File.ReadAllText(observed)==Child(launchProbe,"Launcher.dll")+"\nmini-player,clock","Restart passes the canonical launcher path and previously running widget IDs to the installed runtime");
    string rollback=Fixture("Commit rollback"),rollbackParent=Child(root,"Commit target");Reject(delegate{Move(rollback,rollbackParent,delegate(int n,string s){if(n==85){Put(Child(rollbackParent,InstallEngine.ProductName),"external-new.txt","created after commit");throw new IOException("Injected registration failure");}});},"Post-commit registration failure rolls back copied files");Check(File.Exists(Child(rollback,"Launcher.dll"))&&File.ReadAllText(Child(Child(rollbackParent,InstallEngine.ProductName),"external-new.txt"))=="created after commit","Rollback preserves source and concurrent destination files");
    string readOnly=Fixture("Readonly");File.SetAttributes(Child(readOnly,"Мои заметки.txt"),FileAttributes.ReadOnly);var readonlyResult=Move(readOnly,Child(root,"Readonly target"),Ignore);Check(!Directory.Exists(readOnly)&&(File.GetAttributes(Child(readonlyResult.Destination,"Мои заметки.txt"))&FileAttributes.ReadOnly)!=0,"Read-only files move while their destination attributes are retained");
    string locked=Fixture("Locked");using(var stream=new FileStream(HubPath.Disk(Child(locked,"Launcher.dll")),FileMode.Open,FileAccess.ReadWrite,FileShare.None)){Reject(delegate{Move(locked,Child(root,"Locked target"),Ignore);},"Locked source aborts without removal");}Check(File.Exists(Child(locked,InstallEngine.MarkerName)),"Failed move keeps original marker");

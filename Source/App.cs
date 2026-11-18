@@ -55,7 +55,7 @@ public sealed partial class Player : Window
  List<GlobalSystemMediaTransportControlsSession> sessions=new();
  bool refreshing,busy,closing,shownByUser=false,refreshSourceLabels; string track="";
  readonly string settingsPath=System.IO.Path.Combine(LaunchContext.DataDirectory,"settings.json");
- record Settings(double X,double Y,bool Pin,bool Auto,string Source,string AudioTarget="",string AudioSource="",bool MovementLocked=false);
+ record Settings(double X,double Y,bool Pin,bool Auto,string Source,string AudioTarget="",string AudioSource="",bool MovementLocked=false,PauseMode OnPause=PauseMode.KeepVisible,bool ClickThrough=false);
  string preferred="";
  readonly Slider volumeSlider=new(){Minimum=0,Maximum=100,Height=28,IsMoveToPointEnabled=true,IsEnabled=false};
  readonly TextBlock volumeLabel=new(){Text="—",Width=46,TextAlignment=TextAlignment.Right,VerticalAlignment=VerticalAlignment.Center};
@@ -69,6 +69,7 @@ public sealed partial class Player : Window
  string seekTrack="";
  void SetSeekFromPointer(double x){seek.Value=seek.Minimum+Math.Clamp((x-9)/Math.Max(1,seek.ActualWidth-18),0,1)*(seek.Maximum-seek.Minimum);}
  void SizePlayer(){
+  if(customSurface!=null){Width=customSurface.Width;Height=customSurface.Height;return;}
   var padding=((Border)Content).Padding;
   Width=(deviceFace!=null?deviceFace.Width+padding.Left+padding.Right+2*appearance.BorderWidth:300)*appearance.Scale;
   Height=(deviceFace!=null?deviceFace.Height+padding.Top+padding.Bottom+2*appearance.BorderWidth:144)*appearance.Scale;
@@ -97,7 +98,7 @@ public sealed partial class Player : Window
    dragOrigin=null;
    if(!CanDragPlayer)return;
    for(var node=e.OriginalSource as DependencyObject;node is Visual;node=VisualTreeHelper.GetParent(node)){
-    if(node is Slider or ComboBox or CheckBox ||node==seekHit||node==recoveryButton||node is FaceMeter)return;
+    if(node is Slider or ComboBox or CheckBox or System.Windows.Controls.Button ||node==seekHit||node==recoveryButton||node is FaceMeter)return;
    }
    dragOrigin=e.GetPosition(this);
   };
@@ -115,6 +116,7 @@ public sealed partial class Player : Window
   var expand=Button("");expand.Content=PlayerIcons.ContextMenu(Brushes.SlateGray);AttachPlayerMenu(expand);DockPanel.SetDock(expand,Dock.Right);header.Children.Add(expand);
   var pin=Button("",TogglePin);pinButton=pin;UpdatePin();DockPanel.SetDock(pin,Dock.Right);header.Children.Add(pin);
   lockButton=Button("",ToggleMovementLock);UpdateMovementLock();DockPanel.SetDock(lockButton,Dock.Right);header.Children.Add(lockButton);
+  clickThroughButton=Button("",ToggleClickThrough);UpdateClickThroughButtons();DockPanel.SetDock(clickThroughButton,Dock.Right);header.Children.Add(clickThroughButton);
   InitializeRepeat();
   var name=new TextBlock{Text="Mini Player",Foreground=Brushes.SlateGray,FontSize=10,VerticalAlignment=VerticalAlignment.Center};header.Children.Add(name);stack.Children.Add(header);
   var row=new DockPanel();var art=new Border{Width=52,Height=52,Background=new SolidColorBrush(Color.FromRgb(39,57,76)),Margin=new Thickness(0,0,10,0),Child=cover};DockPanel.SetDock(art,Dock.Left);row.Children.Add(art);
@@ -130,22 +132,22 @@ public sealed partial class Player : Window
   seek.PreviewKeyDown+=(_,e)=>{if(e.Key is System.Windows.Input.Key.Left or System.Windows.Input.Key.Right or System.Windows.Input.Key.Home or System.Windows.Input.Key.End){seekTrack=track;seeking=true;}};
   seek.PreviewKeyUp+=async(_,e)=>{if(e.Key is System.Windows.Input.Key.Left or System.Windows.Input.Key.Right or System.Windows.Input.Key.Home or System.Windows.Input.Key.End){seeking=false;await Seek();}};
   seek.LostKeyboardFocus+=(_,_)=>{if(!seekHit.IsMouseCaptured&&!seek.IsMouseCaptureWithin)seeking=false;};
-  seek.ValueChanged+=(_,_)=>{if(!updatingSeek)timeLabel.Text=$"{TimeSpan.FromSeconds(seek.Value):m\\:ss} / {TimeSpan.FromSeconds(seek.Maximum):m\\:ss}";};
+  seek.ValueChanged+=(_,_)=>{if(!updatingSeek)DisplayTrackTime(seek.Value,timelineDuration>0?timelineDuration:seek.Maximum);};
   prev.Click+=async(_,_)=>await Command(0);play.Click+=async(_,_)=>await Command(1);next.Click+=async(_,_)=>await Command(2);
   volumeSlider.Template=seek.Template;
   volumeSlider.ValueChanged+=(_,_)=>{volumeLabel.Text=$"{volumeSlider.Value:0}%";if(!volumeSync&&volumeSlider.IsEnabled&&audioTarget.Length>0&&audioSource==(session?.SourceAppUserModelId??"")){try{Audio.Set(audioTarget,volumeSlider.Value);}catch{audioHint.Text="Не удалось изменить громкость приложения.";}}};
-  sources.SelectionChanged+=async(_,_)=>{if(refreshing)return;session=sources.SelectedIndex>=0?sessions[sources.SelectedIndex]:null;ResetTimeline();ResetRepeat();ResetVolumeSource();SetMediaPlaying(false);preferred=session?.SourceAppUserModelId??"";track="";Save();UpdateSourceBehavior();await Refresh();};
+  sources.SelectionChanged+=async(_,_)=>{if(refreshing)return;session=sources.SelectedIndex>=0?sessions[sources.SelectedIndex]:null;ResetTimeline();ResetRepeat();ResetVolumeSource();SetMediaPlaying(false);preferred=session?.SourceAppUserModelId??"";track="";cover.Source=null;ObservePause(false);Save();UpdateSourceBehavior();await Refresh();};
   Width=410;Foreground=Brushes.DimGray;SizePlayer();
   auto.Checked+=(_,_)=>{shownByUser=false;Save();UpdateSourceBehavior();};auto.Unchecked+=(_,_)=>{shownByUser=true;Save();};
   tray=new(){Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppContext.BaseDirectory,"Player.ico")),Text="Mini Player",Visible=true};
-  var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Показать плеер",null,(_,_)=>Dispatcher.Invoke(()=>ReturnToScreen()));menu.Items.Add("Настройки",null,(_,_)=>Dispatcher.Invoke(()=>OpenSettings()));menu.Items.Add("Кастомизация",null,(_,_)=>Dispatcher.Invoke(()=>Customize()));menu.Items.Add("Выход",null,(_,_)=>Dispatcher.Invoke(()=>{closing=true;Close();}));tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>ReturnToScreen();
+  var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Показать плеер",null,(_,_)=>Dispatcher.Invoke(()=>ReturnToScreen()));AddTrayRestore(menu);menu.Items.Add("Настройки",null,(_,_)=>Dispatcher.Invoke(()=>OpenSettings()));menu.Items.Add("Кастомизация",null,(_,_)=>Dispatcher.Invoke(()=>Customize()));menu.Items.Add("Выход",null,(_,_)=>Dispatcher.Invoke(()=>{closing=true;Close();}));tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>ReturnToScreen();
   motionTimer.Tick+=(_,_)=>RenderMotion();
   IsVisibleChanged+=(_,_)=>{SyncMotion();UpdateRecoveryArrow();};
   LocationChanged+=(_,_)=>UpdateRecoveryArrow();SizeChanged+=(_,_)=>UpdateRecoveryArrow();
-  SourceInitialized+=(_,_)=>{InitializeHotkeys();InitializeScreenBoundsGuard();};
-  Closing+=(_,_)=>{closing=true;CancelRecoveryAnimation();DisposeHotkeys();recoveryWindow?.Close();settingsWindow?.Close();customizeWindow?.Close();peakReader.Dispose();motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
+  SourceInitialized+=(_,_)=>{InitializeHotkeys();InitializeScreenBoundsGuard();SetClickThrough(clickThrough,false);};
+  Closing+=(_,_)=>{closing=true;DisposeCustomSurface();CancelRecoveryAnimation();DisposeHotkeys();recoveryWindow?.Close();settingsWindow?.Close();customizeWindow?.Close();peakReader.Dispose();motionTimer.Stop();Save();timer.Stop();tray.Dispose();};
   Loaded+=async(_,_)=>{RefreshHubInterface();ImportLegacySettings();LoadSettings();LoadAppearance();UpdateRecoveryArrow();timer.Start();try{manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();await Refresh();}catch(Exception ex){status.Text="Нет доступа к медиасессиям Windows: "+ex.Message;}};
-  timer.Tick+=async(_,_)=>{RefreshHubInterface();UpdateRecoveryArrow();UpdateSourceBehavior();await Refresh();};
+  timer.Tick+=async(_,_)=>{RefreshCustomPreset();RefreshHubInterface();UpdateRecoveryArrow();UpdateSourceBehavior();await Refresh();};
  }
  static WButton Button(string label,Action? action=null){var b=new WButton{Content=label,MinWidth=30,Height=26,Padding=new Thickness(5,0,5,0)};if(action!=null)b.Click+=(_,_)=>action();return b;}
  async Task Command(int command){
@@ -194,20 +196,56 @@ public sealed partial class Player : Window
      if(index<0&&sessions.Count==1)index=0;
     }
     sources.SelectedIndex=index;sources.IsEnabled=true;session=index>=0?sessions[index]:null;
-    if(session!=old){track="";ResetTimeline();ResetRepeat();ResetVolumeSource();}refreshing=false;
+    if(session!=old){track="";ResetTimeline();ResetRepeat();ResetVolumeSource();ObservePause(false);}refreshing=false;FillSourcePicker();
    }
-   if(session==null){ResetTimeline();ResetRepeat();ResetVolumeSource();SetMediaPlaying(false);title.Text="Включите музыку или видео";artist.Text="Выберите источник в настройках";cover.Source=null;seek.IsEnabled=false;prev.IsEnabled=play.IsEnabled=next.IsEnabled=false;return;}
-   var playback=session.GetPlaybackInfo();SynchronizeRepeat(playback);SynchronizeTimeline(session.GetTimelineProperties(),playback);SetMediaPlaying(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);play.Content=mediaPlaying?"Ⅱ":"▶";
+   if(session==null){ObservePause(false);ResetTimeline();ResetRepeat();ResetVolumeSource();SetMediaPlaying(false);title.Text="Включите музыку или видео";artist.Text="Нажмите на название для выбора источника";cover.Source=null;seek.IsEnabled=false;prev.IsEnabled=play.IsEnabled=next.IsEnabled=false;return;}
+   var playback=session.GetPlaybackInfo();ObservePause(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused);SynchronizeRepeat(playback);SynchronizeTimeline(session.GetTimelineProperties(),playback);SetMediaPlaying(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);play.Content=mediaPlaying?"Ⅱ":"▶";
    prev.IsEnabled=playback.Controls.IsPreviousEnabled;next.IsEnabled=playback.Controls.IsNextEnabled;
    play.IsEnabled=playback.Controls.IsPlayPauseToggleEnabled||(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing?playback.Controls.IsPauseEnabled:playback.Controls.IsPlayEnabled);
    prev.ToolTip=prev.IsEnabled?"Предыдущий":"Сайт не предоставляет предыдущий трек";next.ToolTip=next.IsEnabled?"Следующий":"Сайт не предоставляет следующий трек";
-   var requestedSession=session;var media=await requestedSession.TryGetMediaPropertiesAsync();if(!Equals(requestedSession,session))return;var key=session.SourceAppUserModelId+"|"+media.Title+"|"+media.Artist;
+   var requestedSession=session;var media=await requestedSession.TryGetMediaPropertiesAsync();if(closing||!Equals(requestedSession,session))return;var key=session.SourceAppUserModelId+"|"+media.Title+"|"+media.Artist;
    title.Text=string.IsNullOrEmpty(media.Title)?"Без названия":media.Title;artist.Text=media.Artist;
-   if(key!=track){track=key;ResetTimeline();SynchronizeTimeline(requestedSession.GetTimelineProperties(),playback);cover.Source=null;if(media.Thumbnail!=null){using var stream=await media.Thumbnail.OpenReadAsync();if(stream.Size<=8*1024*1024){using var reader=new DataReader(stream);await reader.LoadAsync((uint)stream.Size);var data=new byte[(int)stream.Size];reader.ReadBytes(data);using var memory=new System.IO.MemoryStream(data);var bitmap=new BitmapImage();bitmap.BeginInit();bitmap.CacheOption=BitmapCacheOption.OnLoad;bitmap.DecodePixelWidth=152;bitmap.StreamSource=memory;bitmap.EndInit();bitmap.Freeze();cover.Source=bitmap;}}}
+   if(key!=track){
+    track=key;
+    ResetTimeline();
+    SynchronizeTimeline(requestedSession.GetTimelineProperties(),playback);
+    cover.Source=null;
+    nextArtworkAttempt=0;
+   }
+   if(cover.Source==null && media.Thumbnail!=null && Environment.TickCount64>=nextArtworkAttempt)
+    await LoadArtworkAsync(media.Thumbnail,requestedSession,key);
    UpdateSourceBehavior();
   }catch{SetMediaPlaying(false);status.Text="Ожидание медиаисточника…";}finally{busy=false;refreshing=false;}
  }
- void Save(){try{System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(settingsPath)!);System.IO.File.WriteAllText(settingsPath,System.Text.Json.JsonSerializer.Serialize(new Settings(Left,Top,Topmost,auto.IsChecked==true,preferred,audioTarget,audioSource,movementLocked)));}catch{}}
+
+ long nextArtworkAttempt;
+ async Task LoadArtworkAsync(IRandomAccessStreamReference thumbnail,GlobalSystemMediaTransportControlsSession source,string key){
+  // Some sources publish the title before artwork, or briefly return an unreadable stream.
+  nextArtworkAttempt=Environment.TickCount64+5000;
+  bool StillCurrent()=>!closing && Equals(source,session) && key==track;
+  try{
+   using var stream=await thumbnail.OpenReadAsync();
+   ulong size=stream.Size;
+   if(!StillCurrent() || size==0 || size>8*1024*1024)return;
+   using var reader=new DataReader(stream);
+   uint loaded=await reader.LoadAsync((uint)size);
+   if(!StillCurrent() || loaded!=size)return;
+   var data=new byte[(int)loaded];
+   reader.ReadBytes(data);
+   using var memory=new System.IO.MemoryStream(data);
+   var bitmap=new BitmapImage();
+   bitmap.BeginInit();
+   bitmap.CacheOption=BitmapCacheOption.OnLoad;
+   bitmap.DecodePixelWidth=152;
+   bitmap.StreamSource=memory;
+   bitmap.EndInit();
+   bitmap.Freeze();
+   cover.Source=bitmap;
+  }catch(Exception ex) when(ex is not OutOfMemoryException){
+   // Leave only the artwork pending; playback and seeking are still valid.
+  }
+ }
+ void Save(){try{System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(settingsPath)!);System.IO.File.WriteAllText(settingsPath,System.Text.Json.JsonSerializer.Serialize(new Settings(Left,Top,Topmost,auto.IsChecked==true,preferred,audioTarget,audioSource,movementLocked,OnPause:pauseMode,ClickThrough:clickThrough)));}catch{}}
  void ImportLegacySettings(){
   var target=System.IO.Path.GetDirectoryName(settingsPath)!;
   var legacy=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(target)!,"YandexMiniPlayer");
@@ -219,7 +257,7 @@ public sealed partial class Player : Window
    }
   }
  }
- void LoadSettings(){try{var s=System.Text.Json.JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(settingsPath));if(s!=null){Left=Math.Clamp(s.X,SystemParameters.VirtualScreenLeft,SystemParameters.VirtualScreenLeft+SystemParameters.VirtualScreenWidth-Width);Top=Math.Clamp(s.Y,SystemParameters.VirtualScreenTop,SystemParameters.VirtualScreenTop+SystemParameters.VirtualScreenHeight-Height);Topmost=s.Pin;preferred=s.Source;audioTarget="";audioSource="";movementLocked=s.MovementLocked;auto.IsChecked=s.Auto;}}catch{}UpdatePin();UpdateMovementLock(); }
+ void LoadSettings(){try{var s=System.Text.Json.JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(settingsPath));if(s!=null){Left=Math.Clamp(s.X,SystemParameters.VirtualScreenLeft,SystemParameters.VirtualScreenLeft+SystemParameters.VirtualScreenWidth-Width);Top=Math.Clamp(s.Y,SystemParameters.VirtualScreenTop,SystemParameters.VirtualScreenTop+SystemParameters.VirtualScreenHeight-Height);Topmost=s.Pin;preferred=s.Source;audioTarget="";audioSource="";movementLocked=s.MovementLocked;SetClickThrough(s.ClickThrough,false);pauseMode=Enum.IsDefined(s.OnPause)?s.OnPause:PauseMode.KeepVisible;auto.IsChecked=s.Auto;}}catch{}UpdatePin();UpdateMovementLock(); }
  [STAThread] public static void Main(string[] args){
   if(args.Length==2&&args[0]=="--self-test"){
    var applicationTest=new PlayerApplication();var player=new Player();player.tray.Visible=false;

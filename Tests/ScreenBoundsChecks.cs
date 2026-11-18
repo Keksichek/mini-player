@@ -153,6 +153,22 @@ static class ScreenBoundsChecks
    var previewScreen=Screen.AllScreens.OrderBy(s=>s.Bounds.Left).First().WorkingArea;
    SetWindowPos(handle,IntPtr.Zero,previewScreen.Left-current.Width/2,previewScreen.Top+100,0,0,0x0001|0x0004|0x0010);Pump();Call("UpdateRecoveryArrow");window.UpdateLayout();
    CaptureReturnPreview(window,handle,Path.Combine(snapshots,"recovery-pop-preview.gif"),previewScreen);
+   string presetFolder=Path.Combine(root,"Data","Customization","mini-player");
+   Directory.CreateDirectory(presetFolder);
+   File.WriteAllText(Path.Combine(presetFolder,"active.json"),"{\"Width\":420,\"Height\":420,\"Shape\":\"circle\"}");
+   Call("RefreshCustomPreset",true);
+   window.UpdateLayout();
+   var circleFace=(Canvas)Field("customSurface")!;
+   var origin=circleFace.PointToScreen(new Point());
+   var faceBounds=new Rect(origin,circleFace.PointToScreen(new Point(circleFace.Width,circleFace.Height)));
+   var clippedCorner=new Rect(origin,circleFace.PointToScreen(new Point(46,46)));
+   Check(!(bool)Call("ShowEmbeddedRecovery",faceBounds,clippedCorner,180d)!,
+    "A transparent corner of the circular player leaves recovery to the external tab");
+   var halfCircle=new Rect(origin,circleFace.PointToScreen(new Point(circleFace.Width/2,circleFace.Height)));
+   Check((bool)Call("ShowEmbeddedRecovery",faceBounds,halfCircle,180d)!,"A visible half-circle keeps its recovery arrow embedded");
+   var circleArrow=(Button)Field("recoveryButton")!;
+   var buttonBounds=new Rect(Canvas.GetLeft(circleArrow),Canvas.GetTop(circleArrow),circleArrow.Width,circleArrow.Height);
+   Check(circleFace.Clip.FillContains(new RectangleGeometry(buttonBounds)),"Entire embedded recovery button fits the shape");
    Console.WriteLine("TOTAL "+checks+" PASS");return 0;
   }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
   finally{if(player!=null){try{Set("closing",true);((Window)player).Close();}catch{}}application?.Shutdown();}

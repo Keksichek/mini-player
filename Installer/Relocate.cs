@@ -39,15 +39,31 @@ namespace WidgetLauncherSetup
    foreach(string directory in Directory.GetDirectories(path)){InstallEngine.NoLinks(directory);directories.Add(Relative(root,directory));Collect(root,directory,files,directories);}
   }
   static bool Held(Mutex mutex){try{return mutex.WaitOne(0);}catch(AbandonedMutexException){return true;}}
-  public static RelocationResult Relocate(string source,string selected,bool test,Action<int,string> progress){
+  public static RelocationResult Relocate(string source,string selected,bool test,Action<int,string> progress,Action<string> resumeOnFailure=null){
    source=InstallEngine.Normalize(source);string target=Destination(source,selected,test);
    string[] identities=new[]{source,target}.OrderBy(x=>x,StringComparer.OrdinalIgnoreCase).ToArray();
-   using(var first=new Mutex(false,"Local\\WidgetLauncher.Install."+InstallEngine.Hash(identities[0])))using(var second=new Mutex(false,"Local\\WidgetLauncher.Install."+InstallEngine.Hash(identities[1]))){
-    bool a=false,b=false;try{a=Held(first);b=Held(second);if(!a||!b)throw new IOException("Установка, удаление или перенос уже выполняется.");return RelocateCore(source,target,selected,test,progress);}finally{if(b)second.ReleaseMutex();if(a)first.ReleaseMutex();}
+   string restartRoot=null;
+   try{
+    using(var first=new Mutex(false,"Local\\WidgetLauncher.Install."+InstallEngine.Hash(identities[0])))
+    using(var second=new Mutex(false,"Local\\WidgetLauncher.Install."+InstallEngine.Hash(identities[1]))){
+     bool a=false,b=false;
+     try{
+      a=Held(first);b=Held(second);
+      if(!a||!b)throw new IOException("Установка, удаление или перенос уже выполняется.");
+      progress(2,"Закрываем лаунчер и виджеты…");restartRoot=source;
+      InstallEngine.StopApplications(source);
+      return RelocateCore(source,target,selected,test,progress,delegate{restartRoot=target;});
+     }finally{if(b)second.ReleaseMutex();if(a)first.ReleaseMutex();}
+    }
+   }catch(Exception failure){
+    if(restartRoot!=null&&resumeOnFailure!=null){
+     try{resumeOnFailure(restartRoot);}
+     catch(Exception restart){throw new IOException(failure.Message+" Не удалось возобновить лаунчер и виджеты из "+restartRoot+": "+restart.Message,failure);}
+    }
+    throw;
    }
   }
-  static RelocationResult RelocateCore(string source,string target,string selected,bool test,Action<int,string> progress){
-   progress(2,"Закрываем лаунчер и виджеты…");InstallEngine.StopApplications(source);
+  static RelocationResult RelocateCore(string source,string target,string selected,bool test,Action<int,string> progress,Action destinationCommitted){
    for(int i=0;i<80;i++){try{InstallEngine.CheckStopped(source);break;}catch(IOException){if(i==79)throw;Thread.Sleep(250);}}
    // Revalidate after waiting; a destination can change while applications close.
    if(!String.Equals(target,Destination(source,selected,test),StringComparison.OrdinalIgnoreCase))throw new IOException("Папка назначения изменилась.");
@@ -73,6 +89,7 @@ namespace WidgetLauncherSetup
     if(committed&&!registered){try{DeleteVerifiedFiles(target,stagedFiles,stagedDirectories);}catch{}}
     throw;
    }finally{if(Directory.Exists(stage)){try{DeleteOwnTree(stage,parent);}catch{}}}
+   destinationCommitted();
    progress(92,"Убираем проверенные файлы из старой папки…");
    bool leftovers=false;
    foreach(var file in files.OrderBy(x=>x.Relative.Equals(InstallEngine.MarkerName,StringComparison.OrdinalIgnoreCase)?1:0)){
@@ -95,6 +112,14 @@ namespace WidgetLauncherSetup
  }
  internal static class RelocateProgram
  {
+  internal static void ResumeLauncher(string root,string[] widgets){
+   string command=QuoteArgument(InstallEngine.Child(root,"Launcher.dll"));
+   if(widgets.Length>0)command+=" --resume-widgets "+QuoteArgument(String.Join(",",widgets));
+   string runtime=InstallEngine.Child(root,@"Runtime\dotnet.exe");
+   using(var process=Process.Start(new ProcessStartInfo(HubPath.Disk(runtime),command){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=HubPath.Disk(root)})){
+    if(process==null)throw new IOException("Не удалось запустить лаунчер.");
+   }
+  }
   static string Option(string[] args,string name){int index=Array.IndexOf(args,name);return index>=0&&index+1<args.Length?args[index+1]:"";}
   internal static string QuoteArgument(string value){
    var command=new StringBuilder("\"");int slashes=0;
@@ -151,10 +176,11 @@ namespace WidgetLauncherSetup
    status=Ui.Label("Подготавливаем новую папку…",32,182,576,80,10,Ui.Muted);Controls.Add(status);progress=new Ui.Progress{Location=new Point(32,280),Size=new Size(576,8),Value=preview?45:0};Controls.Add(progress);
    busy=!preview;FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy)e.Cancel=true;};if(!preview)Shown+=Run;
   }
+  void ResumeLauncher(string root){RelocateProgram.ResumeLauncher(root,resume);}
   async void Run(object sender,EventArgs e){
-   try{var moved=await Task.Run(delegate{return RelocationEngine.Relocate(source,selected,false,delegate(int percent,string text){try{BeginInvoke((Action)delegate{progress.Value=percent;status.Text=text;});}catch(InvalidOperationException){}});});
+   try{var moved=await Task.Run(delegate{return RelocationEngine.Relocate(source,selected,false,delegate(int percent,string text){try{BeginInvoke((Action)delegate{progress.Value=percent;status.Text=text;});}catch(InvalidOperationException){}},ResumeLauncher);});
     Result=moved.Destination+"\n"+moved.Warning;Success=true;status.Text="Готово. Новая папка:\n"+moved.Destination+(moved.Warning.Length>0?"\n"+moved.Warning:"");
-    var command=resume.Length>0?"--resume-widgets "+InstallEngine.Quote(String.Join(",",resume)):"";Process.Start(new ProcessStartInfo(HubPath.Disk(Path.Combine(moved.Destination,"Launcher.exe")),command){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=HubPath.Disk(moved.Destination)});
+    ResumeLauncher(moved.Destination);
    }catch(Exception ex){if(Success){Result+="\nНе удалось открыть лаунчер: "+ex.Message;status.Text="Файлы перенесены. Откройте Launcher.exe из новой папки:\n"+Result;}else{Result=ex.Message;status.Text="Перенос не завершён. "+ex.Message;}}
    finally{busy=false;var done=Ui.Button("Закрыть",442,316,166,true);done.Click+=delegate{Close();};Controls.Add(done);AcceptButton=done;CancelButton=done;}
   }

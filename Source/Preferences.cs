@@ -58,6 +58,7 @@ public sealed partial class Player
   var empty=new TextBlock{Text="Включите музыку или видео, чтобы приложение появилось в списке.",FontSize=12,Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)};
   empty.SetBinding(VisibilityProperty,new Binding("Items.IsEmpty"){Source=sources,Converter=new BooleanToVisibilityConverter()});
   media.Children.Add(empty);
+  media.Children.Add(new TextBlock{Text="Чтобы быстро сменить источник, нажмите на название трека в плеере.",FontSize=12,Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
 
   volumeSlider.ClearValue(Control.TemplateProperty);
   var mixer=Section("Громкость");
@@ -69,6 +70,7 @@ public sealed partial class Player
   var behavior=Section("Поведение плеера");
   auto.Foreground=ink;auto.FontSize=13;behavior.Children.Add(auto);
   behavior.Children.Add(new TextBlock{Text="Плеер появляется, когда выбранное приложение свёрнуто, и скрывается, когда его окно открыто. Источник выбирается выше.",FontSize=12,Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
+  AddPausePreference(behavior);
   var hotkeys=Section("Горячие клавиши");hotkeys.Children.Add(BuildHotkeySettings());
   var uninstall=PreferencesButton(new TextBlock{Text=LaunchContext.LauncherRoot==null?"Удалить приложение полностью":"Удалить виджет через лаунчер",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center});
   uninstall.Foreground=PreferencesDanger;uninstall.Background=PreferencesBrush("#2B202A");uninstall.BorderBrush=PreferencesBrush("#57313B");
@@ -109,17 +111,17 @@ public sealed partial class Player
   }
   cancelHotkeyCapture=CancelCapture;
 
-  foreach(var action in new[]{HotkeyAction.Pause,HotkeyAction.Play,HotkeyAction.Next,HotkeyAction.Previous,HotkeyAction.Pin,HotkeyAction.Unpin,HotkeyAction.Hide,HotkeyAction.Show,HotkeyAction.LockMovement,HotkeyAction.UnlockMovement}){
+  foreach(var action in new[]{HotkeyAction.Pause,HotkeyAction.Play,HotkeyAction.Next,HotkeyAction.Previous,HotkeyAction.Pin,HotkeyAction.Unpin,HotkeyAction.Hide,HotkeyAction.Show,HotkeyAction.LockMovement,HotkeyAction.UnlockMovement,HotkeyAction.EnableClickThrough,HotkeyAction.DisableClickThrough}){
    var row=new Grid{Margin=new Thickness(0,3,0,3)};
    row.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
    row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
    row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
    FrameworkElement actionLabel;
-   if(action is HotkeyAction.Pin or HotkeyAction.Unpin or HotkeyAction.Hide or HotkeyAction.Show or HotkeyAction.LockMovement or HotkeyAction.UnlockMovement){
+   if(action is HotkeyAction.Pin or HotkeyAction.Unpin or HotkeyAction.Hide or HotkeyAction.Show or HotkeyAction.LockMovement or HotkeyAction.UnlockMovement or HotkeyAction.EnableClickThrough or HotkeyAction.DisableClickThrough){
     var label=new TextBlock{FontSize=13,TextWrapping=TextWrapping.Wrap};
     label.Inlines.Add(new Run(HotkeyActionName(action)+" ("));
     var ink=PreferencesText;
-    var icon=action is HotkeyAction.Pin or HotkeyAction.Unpin?PlayerIcons.Pin(action==HotkeyAction.Pin,ink):action is HotkeyAction.Hide or HotkeyAction.Show?PlayerIcons.Eye(action==HotkeyAction.Hide,ink):PlayerIcons.MovementLock(action==HotkeyAction.LockMovement,ink);
+    var icon=action is HotkeyAction.Pin or HotkeyAction.Unpin?PlayerIcons.Pin(action==HotkeyAction.Pin,ink):action is HotkeyAction.Hide or HotkeyAction.Show?PlayerIcons.Eye(action==HotkeyAction.Hide,ink):action is HotkeyAction.EnableClickThrough or HotkeyAction.DisableClickThrough?PlayerIcons.ClickThrough(action==HotkeyAction.EnableClickThrough,ink):PlayerIcons.MovementLock(action==HotkeyAction.LockMovement,ink);
     label.Inlines.Add(new InlineUIContainer(icon){BaselineAlignment=BaselineAlignment.Center});
     label.Inlines.Add(new Run(")"));
     System.Windows.Automation.AutomationProperties.SetName(label,HotkeyActionName(action));actionLabel=label;

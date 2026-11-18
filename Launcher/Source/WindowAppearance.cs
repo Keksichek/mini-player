@@ -94,7 +94,7 @@ public sealed partial class LauncherWindow
   ChromeButton("Закрыть","M 1,1 L 11,11 M 11,1 L 1,11",Close,true);
   var brand=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(22,0,0,0),VerticalAlignment=VerticalAlignment.Center};
   brand.Children.Add(new TextBlock{Text="VibeWidgetsHub",FontSize=12,Foreground=TextBrush,VerticalAlignment=VerticalAlignment.Center});
-  brand.Children.Add(new Border{Background=ColorBrush("#30283F"),CornerRadius=new CornerRadius(5),Padding=new Thickness(7,3,7,3),Margin=new Thickness(9,0,0,0),Child=new TextBlock{Text="alpha",FontSize=10,Foreground=AccentBrush}});
+  brand.Children.Add(new Border{Background=ColorBrush("#30283F"),CornerRadius=new CornerRadius(5),Height=22,VerticalAlignment=VerticalAlignment.Center,Padding=new Thickness(7,0,7,0),Margin=new Thickness(9,0,0,0),Child=new TextBlock{Text="alpha",FontSize=10,Foreground=AccentBrush,VerticalAlignment=VerticalAlignment.Center}});
   themeToggle=new Button{Width=32,Height=30,Padding=new Thickness(0),Background=Brushes.Transparent,HorizontalContentAlignment=HorizontalAlignment.Center,Margin=new Thickness(8,0,0,0)};
   WindowChrome.SetIsHitTestVisibleInChrome(themeToggle,true);
   themeToggle.Click+=(_,_)=>{if(busy||updatePending)return;bool previous=preferences.LightMode;try{preferences.LightMode=!previous;SaveHubPreferences();ApplyHubTheme();Render();}catch(Exception ex){preferences.LightMode=previous;ApplyHubTheme();message=ex.Message;Render();}};

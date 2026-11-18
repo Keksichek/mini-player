@@ -94,7 +94,7 @@ namespace WidgetLauncherSetup
     journal.Widgets.Add(new UpdateWidget{Id=id,OldFiles=oldFiles,NewFiles=Files(target)});
    }
   }
-  public static long CurrentBuild(string root){string path=At(root,StateName);InstallEngine.NoLinks(path);if(!File.Exists(path))return 0;try{var state=Dictionary(Json.DeserializeObject(File.ReadAllText(path)));object value;if(!state.TryGetValue("BuildNumber",out value)||!(value is int||value is long)||Convert.ToInt64(value)<=0)throw new IOException("Некорректный номер установленной сборки.");return Convert.ToInt64(value);}catch(Exception ex){throw new IOException("Сведения об установленной версии повреждены. Обновление не начато.",ex);}}
+  public static long CurrentBuild(string root){return InstallEngine.InstalledBuild(root);}
   static void WriteJournal(string root,UpdateJournal journal){string stage=Transaction(root),file=At(stage,"journal.json"),temp=At(stage,"journal.tmp");Put(temp,Json.Serialize(journal));if(File.Exists(file))System.IO.File.Replace(HubPath.Disk(temp),HubPath.Disk(file),null);else File.Move(temp,file);}
   static UpdateJournal ReadJournal(string root){
    string path=At(Transaction(root),"journal.json");InstallEngine.NoLinks(path);if(new FileInfo(HubPath.Disk(path)).Length>16*1024*1024)throw new IOException("Журнал обновления повреждён.");var journal=Json.Deserialize<UpdateJournal>(File.ReadAllText(path));
@@ -134,7 +134,10 @@ namespace WidgetLauncherSetup
     var paths=marker.Files.Concat(newFiles.Select(x=>x.Relative)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p=>p.Equals("Launcher.exe",StringComparison.OrdinalIgnoreCase)?2:p.Equals("Update.exe",StringComparison.OrdinalIgnoreCase)?1:0).ToArray();
     foreach(string relative in paths){string existing=At(root,relative);InstallEngine.NoLinks(existing);if(File.Exists(existing)&&!marker.Files.Contains(relative,StringComparer.OrdinalIgnoreCase))throw new IOException("Обновление заменяет посторонний файл: "+relative);var next=newFiles.SingleOrDefault(x=>String.Equals(x.Relative,relative,StringComparison.OrdinalIgnoreCase));journal.Core.Add(new UpdateFile{Relative=relative,HadOriginal=File.Exists(existing),OldHash=File.Exists(existing)?Digest(existing):null,NewHash=next==null?null:next.Hash});}
     journal.OldMarkerHash=Digest(At(root,InstallEngine.MarkerName));Copy(At(root,InstallEngine.MarkerName),At(stage,"old\\"+InstallEngine.MarkerName));
-    marker.Files=newFiles.Select(x=>x.Relative).ToArray();marker.Version=manifest.Version;marker.WidgetIds=marker.WidgetIds.Union(journal.Widgets.Select(x=>x.Id)).ToArray();
+    marker.Files=newFiles.Select(x=>x.Relative).ToArray();marker.Version=manifest.Version;
+    marker.WidgetIds=(marker.WidgetIds??new string[0])
+     .Union(InstallEngine.ReadWidgetIds(At(newer,"Catalog\\widgets.json")),StringComparer.OrdinalIgnoreCase)
+     .Union(journal.Widgets.Select(x=>x.Id),StringComparer.OrdinalIgnoreCase).ToArray();
     Put(At(newer,InstallEngine.MarkerName),Json.Serialize(marker));journal.NewMarkerHash=Digest(At(newer,InstallEngine.MarkerName));WriteJournal(root,journal);journalWritten=true;
     journal.Phase="applying";WriteJournal(root,journal);progress(40,"Устанавливаем обновление…");
     foreach(var file in journal.Core){

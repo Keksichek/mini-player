@@ -1,10 +1,12 @@
 param(
  [string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'),
  [string]$RuntimeCache = (Join-Path $PSScriptRoot '.build\downloads'),
- [switch]$SkipInstaller
+ [switch]$SkipInstaller,
+ [long]$BuildNumber = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 )
 $ErrorActionPreference='Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Run this build script with PowerShell 7.' }
+if ($BuildNumber -le 0) { throw 'BuildNumber must be positive.' }
 $projectRoot=$PSScriptRoot
 $buildRoot=Join-Path $projectRoot '.build'
 $payload=Join-Path $buildRoot 'Payload'
@@ -28,6 +30,7 @@ function Compile-App([string]$Name,[string]$SourceDirectory,[string]$Destination
   [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($file.FullName),[Text.Encoding]::UTF8),$parse,$file.FullName)
  })
  if(!$Player){$shared=Join-Path $projectRoot 'Shared\UpdateProtocol.cs';$trees+=[Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($shared),[Text.Encoding]::UTF8),$parse,$shared)}
+ if($Player){foreach($presetSourceName in @('WidgetPreset.cs','PresetSurface.cs','PresetPreview.cs')){$shared=Join-Path $projectRoot ('Launcher\Source\'+$presetSourceName);$trees+=[Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($shared),[Text.Encoding]::UTF8),$parse,$shared)}}
  [Microsoft.CodeAnalysis.MetadataReference[]]$references=$baseReferences
  if($Player){foreach($dependencyName in @('Microsoft.Windows.SDK.NET.dll','WinRT.Runtime.dll')){$references+=[Microsoft.CodeAnalysis.MetadataReference]::CreateFromFile((Join-Path $projectRoot ('App\'+$dependencyName)))}}
  $options=[Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions]::new([Microsoft.CodeAnalysis.OutputKind]::WindowsApplication).WithOptimizationLevel([Microsoft.CodeAnalysis.OptimizationLevel]::Release).WithNullableContextOptions([Microsoft.CodeAnalysis.NullableContextOptions]::Enable)
@@ -50,12 +53,14 @@ foreach($name in @('MiniPlayer.exe','MiniPlayer.deps.json','MiniPlayer.runtimeco
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Source\Fonts') -Destination (Join-Path $widget 'App') -Recurse -Force
 Compile-App 'MiniPlayer' (Join-Path $projectRoot 'Source') (Join-Path $widget 'App\MiniPlayer.dll') -Player
+[IO.File]::WriteAllText((Join-Path $widget 'App\preset-format.json'),'{"Version":4}')
 Compile-App 'Launcher' (Join-Path $projectRoot 'Launcher\Source') (Join-Path $payload 'Launcher.dll')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'App\MiniPlayer.runtimeconfig.json') -Destination (Join-Path $payload 'Launcher.runtimeconfig.json') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Source\Fonts') -Destination $payload -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Source\Player.ico') -Destination (Join-Path $payload 'Player.ico') -Force
 foreach($name in @('Assets','Catalog','Packages','Runtime')){New-Item -ItemType Directory -Force -Path (Join-Path $payload $name) | Out-Null}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'screenshots\Лаванда.png') -Destination (Join-Path $payload 'Assets\mini-player.png') -Force
+if(Test-Path -LiteralPath (Join-Path $projectRoot 'Launcher\Assets')){Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Launcher\Assets') | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payload 'Assets') -Recurse -Force}}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Launcher\catalog.json') -Destination (Join-Path $payload 'Catalog\widgets.json') -Force
 $widgetZip=Join-Path $payload 'Packages\mini-player.zip'
 if(Test-Path -LiteralPath $widgetZip){Remove-Item -LiteralPath $widgetZip -Force}
@@ -72,5 +77,7 @@ foreach($package in $packages){
  if((Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash -ine $package.Hash){throw ('Runtime checksum mismatch: '+$package.Name)}
  [IO.Compression.ZipFile]::ExtractToDirectory($archive,(Join-Path $payload 'Runtime'),$true)
 }
+$buildState = [ordered]@{BuildNumber=$BuildNumber; Version='0.3'; Channel='secondary-local'}
+[IO.File]::WriteAllText((Join-Path $payload 'update-state.json'),($buildState | ConvertTo-Json -Compress))
 if(!$SkipInstaller){& (Join-Path $projectRoot 'Installer\Build.ps1') -PayloadDirectory $payload -OutputDirectory $OutputDirectory}
 Write-Host ('Payload: '+$payload)

@@ -12,7 +12,7 @@ namespace MiniPlayer;
 
 public sealed partial class Player
 {
- enum HotkeyAction { Pause,Play,Next,Previous,Pin,Unpin,Hide,Show,LockMovement,UnlockMovement }
+ enum HotkeyAction { Pause,Play,Next,Previous,Pin,Unpin,Hide,Show,LockMovement,UnlockMovement,EnableClickThrough,DisableClickThrough }
  sealed record HotkeyBinding(ModifierKeys Modifiers,Key Key);
  readonly Dictionary<HotkeyAction,HotkeyBinding> hotkeyBindings=new();
  readonly Dictionary<HotkeyAction,int> registeredHotkeys=new();
@@ -34,7 +34,8 @@ public sealed partial class Player
  static string HotkeyActionName(HotkeyAction action)=>action switch{
   HotkeyAction.Pause=>"Пауза",HotkeyAction.Play=>"Воспроизведение",HotkeyAction.Next=>"Следующий трек",
   HotkeyAction.Previous=>"Предыдущий трек",HotkeyAction.Pin=>"Закрепить",HotkeyAction.Unpin=>"Открепить",
-  HotkeyAction.Hide=>"Скрыть",HotkeyAction.Show=>"Показать",HotkeyAction.LockMovement=>"Заблокировать перемещение",_=>"Разблокировать перемещение"
+  HotkeyAction.Hide=>"Скрыть",HotkeyAction.Show=>"Показать",HotkeyAction.LockMovement=>"Заблокировать перемещение",HotkeyAction.UnlockMovement=>"Разблокировать перемещение",
+  HotkeyAction.EnableClickThrough=>EnablePassThrough,HotkeyAction.DisableClickThrough=>DisablePassThrough,_=>action.ToString()
  };
  static string HotkeyLabel(HotkeyBinding binding){
   var parts=new List<string>();
@@ -162,6 +163,7 @@ public sealed partial class Player
   }
   if(action is HotkeyAction.Hide or HotkeyAction.Show){if(action==HotkeyAction.Hide)HidePlayer();else ReturnToScreen();return;}
   if(action is HotkeyAction.LockMovement or HotkeyAction.UnlockMovement){movementLocked=action==HotkeyAction.LockMovement;UpdateMovementLock();Save();return;}
+  if(action is HotkeyAction.EnableClickThrough or HotkeyAction.DisableClickThrough){SetClickThrough(action==HotkeyAction.EnableClickThrough);return;}
   await Command(action switch{HotkeyAction.Previous=>0,HotkeyAction.Next=>2,HotkeyAction.Pause=>3,_=>4});
   await Refresh();
  }

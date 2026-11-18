@@ -26,6 +26,13 @@ static class PlayerIcons
   return canvas;
  }
 
+ internal static FrameworkElement ClickThrough(bool enabled,Brush ink){
+  var canvas=Surface();
+  canvas.Children.Add(Line("M 3,2 L 15,9 L 9,10 L 6,16 Z",ink));
+  if(enabled)canvas.Children.Add(Line("M 12,3 L 16,3 M 14,1 L 16,3 L 14,5",ink));
+  return canvas;
+ }
+
  internal static FrameworkElement ContextMenu(Brush ink){
   var canvas=Surface();
   var right=new Path{Data=Geometry.Parse("M 9,1 Q 15,1 15,7 H 9 Z"),Fill=ink,StrokeThickness=0};

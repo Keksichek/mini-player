@@ -87,7 +87,7 @@ namespace WidgetLauncherSetup
   public ConfirmWindow(string root){
    Text=InstallEngine.ProductName+" · Подтверждение удаления";AccessibleName="Подтверждение удаления лаунчера";ClientSize=new Size(620,390);Ui.Prepare(this);
    Controls.Add(Ui.Label("Удалить лаунчер?",30,75,560,46,22,Ui.Text));
-   Controls.Add(Ui.Label("Будут удалены лаунчер, установленные виджеты,\nих настройки и ярлыки.",32,137,556,52,11,Ui.Muted));
+   Controls.Add(Ui.Label("Будут удалены лаунчер, виджеты, пресеты, загруженные\nфоны, настройки и ярлыки.",32,137,556,52,11,Ui.Muted));
    var path=new Ui.Surface{Location=new Point(32,206),Size=new Size(556,66),Fill=Ui.Panel,BackColor=Ui.Panel};var label=Ui.Label(root,14,15,528,38,9,Ui.Muted);label.AutoEllipsis=true;path.Controls.Add(label);Controls.Add(path);
    Controls.Add(Ui.Label("Это действие нельзя отменить.",32,288,556,24,10,Color.FromArgb(240,162,172)));
    var cancel=Ui.Button("Отмена",32,330,132,true);cancel.TabIndex=0;cancel.Click+=delegate{Close();};Controls.Add(cancel);AcceptButton=cancel;CancelButton=cancel;

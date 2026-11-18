@@ -109,7 +109,7 @@ public sealed partial class LauncherWindow : Window
 
  public LauncherWindow(string root,bool previewMode=false,string initialPage="catalog")
  {
-  preview=previewMode;page=initialPage is "installed" or "settings"?initialPage:"catalog";manager=new WidgetManager(root);catalog=manager.ReadCatalog().ToList();
+  preview=previewMode;page=initialPage is "installed" or "settings" or "customize" or "obs"?initialPage:"catalog";manager=new WidgetManager(root);catalog=manager.ReadCatalog().ToList();
   preferences=HubPreferences.Load(root);
   BackgroundBrush=ColorBrush("#101117");PanelBrush=ColorBrush("#191A23");MutedBrush=ColorBrush("#999BAF");AccentBrush=ColorBrush("#B9A1FF");TextBrush=ColorBrush("#F1F0F7");notice.Foreground=AccentBrush;
   Title="VibeWidgetsHub alpha";Width=1020;Height=760;MinWidth=900;MinHeight=650;WindowStartupLocation=WindowStartupLocation.CenterScreen;
@@ -122,17 +122,22 @@ public sealed partial class LauncherWindow : Window
   var sidebar=new Border{Background=ColorBrush("#15161E"),BorderBrush=ColorBrush("#272835"),BorderThickness=new Thickness(0,0,1,0),Padding=new Thickness(20,28,20,22)};
   layout.Children.Add(sidebar);var side=new DockPanel();sidebar.Child=side;
   var footer=new StackPanel{Margin=new Thickness(10,0,0,0)};footer.Children.Add(Label("Всё на своём месте",11,MutedBrush));
+  var repositoryLink=new System.Windows.Documents.Hyperlink(new System.Windows.Documents.Run("GitHub ↗")){NavigateUri=new Uri(GitHubUpdateSource.RepositoryUrl),Foreground=AccentBrush};
+  repositoryLink.RequestNavigate+=(_,e)=>{Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri){UseShellExecute=true});e.Handled=true;};
+  footer.Children.Add(new TextBlock{FontSize=11,Margin=new Thickness(0,7,0,0),Inlines={repositoryLink},ToolTip=GitHubUpdateSource.RepositoryUrl});
   footer.Children.Add(new Viewbox{Width=148,Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Left,Margin=new Thickness(0,6,0,0),Child=new TextBlock{Text=BuildInfo.Version,FontSize=10,Foreground=ColorBrush("#999BAF"),ToolTip=BuildInfo.Version}});
   DockPanel.SetDock(footer,Dock.Bottom);side.Children.Add(footer);
   var navigation=new StackPanel();side.Children.Add(navigation);
   var logo=new Border{Width=40,Height=40,CornerRadius=new CornerRadius(12),Background=AccentBrush,HorizontalAlignment=HorizontalAlignment.Left,Child=Label("V",23,BackgroundBrush)};((TextBlock)logo.Child).HorizontalAlignment=HorizontalAlignment.Center;((TextBlock)logo.Child).VerticalAlignment=VerticalAlignment.Center;navigation.Children.Add(logo);
   navigation.Children.Add(Label("Vibe\nWidgetsHub",22,TextBrush,new Thickness(0,15,0,34)));
-  AddNav(navigation,"catalog","Каталог");AddNav(navigation,"installed","Мои виджеты");AddNav(navigation,"settings","Настройки");
+  AddNav(navigation,"catalog","Каталог");AddNav(navigation,"installed","Мои виджеты");AddNav(navigation,"customize","Кастомизация");AddNav(navigation,"obs","Связь с OBS");AddNav(navigation,"settings","Настройки");
   var scroller=new ScrollViewer{Content=content,Style=(Style)Resources[typeof(ScrollViewer)],VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(scroller,1);layout.Children.Add(scroller);
   timer.Tick+=(_,_)=>{if(busy||updatePending)return;string snapshot=Snapshot();if(snapshot!=statusSnapshot)Render();};
   Loaded+=(_,_)=>{if(!preview)timer.Start();};Closed+=(_,_)=>{timer.Stop();uninstallProcess?.Dispose();DisposeLauncherTray();};
   Closing+=(_,e)=>{if(busy){e.Cancel=true;message="Подождите, пока завершится текущая операция.";notice.Text=message;}};
   ConfigureCloseBehavior();
+  ConfigureAutomaticUpdates();
+  Closed+=(_,_)=>ReleasePresetPreview();
   ApplyHubTheme();Render();
  }
  TextBlock Label(string text,double size,Brush? color=null,Thickness? margin=null)=>new(){Text=text,FontSize=size,Foreground=color??TextBrush,TextWrapping=TextWrapping.Wrap,Margin=margin??new Thickness(0)};
@@ -143,17 +148,20 @@ public sealed partial class LauncherWindow : Window
  }
  void AddNav(Panel parent,string id,string title)
  {
-  var button=ActionButton(title,()=>{page=id;message="";Render();});button.HorizontalContentAlignment=HorizontalAlignment.Left;button.Margin=new Thickness(0,0,0,7);button.Padding=new Thickness(14,13,14,13);nav[id]=button;parent.Children.Add(button);
+  var button=ActionButton(title,()=>{page=id;message="";if(id=="customize")customizationStep="home";Render();});button.HorizontalContentAlignment=HorizontalAlignment.Left;button.Margin=new Thickness(0,0,0,7);button.Padding=new Thickness(14,13,14,13);nav[id]=button;parent.Children.Add(button);
  }
  string Snapshot()=>string.Join("|",catalog.Where(x=>x.Available).Select(x=>$"{x.Id}:{manager.HasInstallation(x)}:{manager.IsInstalled(x)}:{manager.IsRunning(x)}"));
  void Render()
  {
+  ReleasePresetPreview();
   statusSnapshot=Snapshot();content.Children.Clear();
   foreach(var item in nav){item.Value.Background=item.Key==page?ColorBrush("#30283F"):Brushes.Transparent;item.Value.Foreground=item.Key==page?AccentBrush:MutedBrush;item.Value.IsEnabled=!busy&&!updatePending;}
-  var titles=page switch{"installed"=>("Мои виджеты","Ваш набор для рабочего стола."),"settings"=>("Настройки","Папки и управление лаунчером."),_=>("Ваш рабочий стол.\nВаши виджеты.","Выбирайте, устанавливайте и запускайте в одном месте.")};
+  var titles=page switch{"installed"=>("Мои виджеты","Ваш набор для рабочего стола."),"customize"=>("Кастомизация","Твой виджет. Твой характер."),"obs"=>("Связь с OBS","Виджеты для твоих стримов."),"settings"=>("Настройки","Обновления, поведение и файлы лаунчера."),_=>("Ваш рабочий стол.\nВаши виджеты.","Выбирайте, устанавливайте и запускайте в одном месте.")};
   content.Children.Add(Label(titles.Item1,30));content.Children.Add(Label(titles.Item2,12,MutedBrush,new Thickness(0,10,0,22)));
   notice.Text=message;notice.Visibility=string.IsNullOrWhiteSpace(message)?Visibility.Collapsed:Visibility.Visible;content.Children.Add(notice);
   if(page=="settings"){RenderSettings();return;}
+  if(page=="customize"){RenderCustomization();return;}
+  if(page=="obs"){content.Children.Add(Card(Label("скоро будет, братва",22,AccentBrush),new Thickness(30)));return;}
   var widgets=catalog.Where(x=>x.Available&&(page!="installed"||manager.HasInstallation(x))).ToList();
   foreach(var widget in widgets)content.Children.Add(WidgetCard(widget));
   if(page=="installed"&&widgets.Count==0)
@@ -212,7 +220,7 @@ public sealed partial class LauncherWindow : Window
  {
   if(busy||updatePending)return;busy=true;message="Выполняем…";Render();
   try{await action();message=success;}
-  catch(Exception ex){message=ex is UnauthorizedAccessException?"Нет доступа к папке лаунчера. Выберите доступную папку при установке.":ex.Message;}
+  catch(Exception ex){message=ex is OperationCanceledException?"Загрузка отменена.":ex is UnauthorizedAccessException?"Нет доступа к папке лаунчера. Выберите доступную папку при установке.":ex.Message;}
   finally{busy=false;Render();if(pendingStop)RequestShutdown();}
  }
  void ConfirmRemove(Widget widget)
@@ -227,7 +235,7 @@ public sealed partial class LauncherWindow : Window
  }
  public void BringForward(){Show();if(WindowState==WindowState.Minimized)WindowState=WindowState.Normal;if(launcherTray!=null)launcherTray.Visible=false;Activate();closeChoiceWindow?.Activate();}
  public void ShowStartupWarning(string warning){message=warning;Render();}
- public void RequestShutdown(){if(busy){pendingStop=true;return;}PrepareForSystemShutdown();Close();}
+ public void RequestShutdown(){networkUpdateCancellation?.Cancel();if(busy){pendingStop=true;return;}PrepareForSystemShutdown();Close();}
  public void RequestMiniPlayerRemoval()
  {
   BringForward();var widget=catalog.FirstOrDefault(x=>x.Id=="mini-player");

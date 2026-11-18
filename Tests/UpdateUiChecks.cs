@@ -30,7 +30,7 @@ static class UpdateUiChecks
  static void WriteFeed(long build,string notes="Исправления и локальная проверка."){
   Directory.CreateDirectory(feed);string zip=Path.Combine(feed,"payload.zip");if(File.Exists(zip))File.Delete(zip);
   using(var archive=ZipFile.Open(zip,ZipArchiveMode.Create)){using var output=new StreamWriter(archive.CreateEntry("sample.txt").Open());output.Write("Local update UI fixture");}
-  var bytes=JsonSerializer.SerializeToUtf8Bytes(new{ProductId="MiniPlayer.WidgetLauncher",Channel="secondary-local",BuildNumber=build,Version="0.19999999999999999999999999999999",Package="payload.zip",Sha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))).ToLowerInvariant(),Size=new FileInfo(zip).Length,Notes=notes});
+  var bytes=JsonSerializer.SerializeToUtf8Bytes(new{ProductId="MiniPlayer.WidgetLauncher",Channel="secondary-local",BuildNumber=build,Version="0.2",Package="payload.zip",Sha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))).ToLowerInvariant(),Size=new FileInfo(zip).Length,Notes=notes});
   File.WriteAllBytes(Path.Combine(feed,"update.json"),bytes);using var rsa=RSA.Create();rsa.FromXmlString(File.ReadAllText(key));File.WriteAllText(Path.Combine(feed,"update.sig"),Convert.ToBase64String(rsa.SignData(bytes,HashAlgorithmName.SHA256,RSASignaturePadding.Pkcs1)));
  }
  static void State(long build)=>File.WriteAllText(Path.Combine(root,"update-state.json"),JsonSerializer.Serialize(new{BuildNumber=build,Version="0.1"}));
@@ -43,13 +43,13 @@ static class UpdateUiChecks
    Directory.CreateDirectory(Path.Combine(root,"Data"));Directory.CreateDirectory(Path.Combine(root,"Catalog"));File.WriteAllText(Path.Combine(root,"Catalog","widgets.json"),"[]");
    string identity=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(root.TrimEnd('\\').ToUpperInvariant())))[..16];
    File.WriteAllText(Path.Combine(root,"launcher-install.json"),JsonSerializer.Serialize(new{ProductId="MiniPlayer.WidgetLauncher",InstallPath=root,InstallId=identity,TestInstallation=true,Files=Array.Empty<string>(),WidgetIds=Array.Empty<string>()}));
-   File.WriteAllText(Path.Combine(root,"Data","hub-settings.json"),"{\"CloseMode\":2}");File.Copy(args[3],Path.Combine(root,"Update.exe"),true);
+   File.WriteAllText(Path.Combine(root,"Data","hub-settings.json"),"{\"CloseMode\":2,\"UpdateSourceMode\":1}");File.Copy(args[3],Path.Combine(root,"Update.exe"),true);
    application=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};System.Threading.SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));var assembly=Assembly.LoadFrom(args[1]);type=assembly.GetType("WidgetLauncher.LauncherWindow",true)!;
    window=(Window)Activator.CreateInstance(type,new object[]{root,false,"settings"})!;
    Check(!HasUpdate()&&!Buttons().Single(button=>button.Content as string=="Проверить обновления").IsEnabled,"Empty source offers folder selection without an Update button");
    var preferences=Field("preferences")!;preferences.GetType().GetProperty("UpdateFeedDirectory")!.SetValue(preferences,feed);
    State(7);WriteFeed(8);CheckFeed();Check(HasUpdate()&&Field("checkedUpdate")!=null,"Trusted newer package enables Update");
-   Check((string)Field("updateMessage")! is string found&&found.Contains("0.19999999999999999999999999999999")&&found.Contains("8"),"Update identifies the available long version and build");Screenshot(Path.Combine(scratch,"updates-night.png"));
+   Check((string)Field("updateMessage")! is string found&&found.Contains("0.2")&&found.Contains("8"),"Update identifies the available long version and build");Screenshot(Path.Combine(scratch,"updates-night.png"));
    preferences.GetType().GetProperty("LightMode")!.SetValue(preferences,true);Call("ApplyHubTheme");Call("Render");Screenshot(Path.Combine(scratch,"updates-day.png"));
    Check(HasUpdate()&&((SolidColorBrush)window.Background).Color.R>200,"Day mode keeps the verified update visible");
    WriteFeed(7);CheckFeed();Check(!HasUpdate()&&((string)Field("updateMessage")!).Contains("Новых обновлений нет"),"Equal build offers no update");

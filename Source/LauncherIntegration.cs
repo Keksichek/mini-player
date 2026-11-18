@@ -82,6 +82,7 @@ public sealed partial class Player
    LaunchContext.ImportPreviousSettings();
    var application=new PlayerApplication();var player=new Player();
    using var ready=new EventWaitHandle(false,EventResetMode.ManualReset,LaunchContext.InstanceName+".Ready");
+   using var presetApplied=new EventWaitHandle(false,EventResetMode.ManualReset,LaunchContext.InstanceName+".PresetApplied");
    bool startupComplete=false;
    var startupActions=new Queue<Action>();
    var events=new List<EventWaitHandle>();var waits=new List<RegisteredWaitHandle>();
@@ -97,6 +98,7 @@ public sealed partial class Player
    Listen(".Settings",()=>{player.ReturnToScreen();player.OpenSettings();});
    Listen(".Customize",()=>{player.ReturnToScreen();player.Customize();});
    Listen(".HubSettings",()=>{player.RefreshHubInterface(true);player.UpdateRecoveryArrow();});
+   Listen(".ApplyPreset",()=>{presetApplied.Reset();if(player.RefreshCustomPreset(true))presetApplied.Set();});
    Listen(".Stop",()=>{player.closing=true;application.Shutdown();});
    player.Loaded+=(_,_)=>{
     if(action==".Settings")player.OpenSettings();else if(action==".Customize")player.Customize();
@@ -104,7 +106,7 @@ public sealed partial class Player
      // Initial placement must not turn a saved automatic behavior into manual mode.
      bool manual=player.shownByUser;player.ReturnToScreen();player.shownByUser=manual;
     }
-    startupComplete=true;ready.Set();
+    startupComplete=true;ready.Set();if(player.customPreset!=null)presetApplied.Set();
     while(startupActions.Count>0&&!application.Dispatcher.HasShutdownStarted)startupActions.Dequeue()();
    };
    try{application.Run(player);}finally{

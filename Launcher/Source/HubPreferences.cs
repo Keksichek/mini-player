@@ -15,6 +15,9 @@ public sealed class HubPreferences
  public bool AllowOffscreen {get;set;}=true;
  public int CloseMode {get;set;}
  public string UpdateFeedDirectory {get;set;}="";
+ public int UpdateSourceMode {get;set;}
+ public bool AutoUpdateEnabled {get;set;}
+ public long AutoUpdateAttemptBuild {get;set;}
  [JsonExtensionData]public Dictionary<string,JsonElement>? ExtraData {get;set;}
  static readonly JsonSerializerOptions Json=new(){PropertyNameCaseInsensitive=true,WriteIndented=true};
  public static string FilePath(string root)=>Path.Combine(root,"Data","hub-settings.json");
@@ -22,6 +25,8 @@ public sealed class HubPreferences
  void Normalize(){
   if(AutoStartMode<0||AutoStartMode>4)AutoStartMode=0;
   if(CloseMode<0||CloseMode>2)CloseMode=0;
+  if(UpdateSourceMode is <0 or >1)UpdateSourceMode=0;
+  if(AutoUpdateAttemptBuild<0)AutoUpdateAttemptBuild=0;
   SelectedWidgets=(SelectedWidgets??Array.Empty<string>()).Where(id=>!string.IsNullOrWhiteSpace(id))
    .Select(id=>id.Trim().ToLowerInvariant()).Where(id=>{try{WidgetManager.ValidateId(id);return true;}catch{return false;}})
    .Distinct(StringComparer.OrdinalIgnoreCase).Take(512).ToArray();

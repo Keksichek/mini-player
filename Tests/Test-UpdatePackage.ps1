@@ -12,7 +12,7 @@ foreach($relative in @('Launcher.exe','Launcher.dll','Launcher.runtimeconfig.jso
 Pack
 Check (([IO.Directory]::GetFiles($feed)|ForEach-Object{[IO.Path]::GetFileName($_)}|Sort-Object) -join ',' -eq 'payload.zip,update.json,update.sig') 'Feed includes only its ZIP, manifest and detached signature'
 $manifestFile=Join-Path $feed 'update.json';$manifest=Get-Content -LiteralPath $manifestFile -Raw|ConvertFrom-Json
-Check ($manifest.BuildNumber -eq 10 -and $manifest.Channel -eq 'secondary-local' -and $manifest.Version -eq '0.19999999999999999999999999999999') 'Build number is independent of the long display version'
+Check ($manifest.BuildNumber -eq 10 -and $manifest.Channel -eq 'secondary-local' -and $manifest.Version -eq '0.3') 'Build number is independent of the long display version'
 $rsa=[Security.Cryptography.RSA]::Create()
 try{$rsa.FromXmlString([IO.File]::ReadAllText($public));Check ($rsa.VerifyData([IO.File]::ReadAllBytes($manifestFile),[Convert]::FromBase64String([IO.File]::ReadAllText((Join-Path $feed 'update.sig'))),[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)) 'Packager signs the exact manifest bytes'}finally{$rsa.Dispose()}
 Check ((Get-FileHash -LiteralPath (Join-Path $feed 'payload.zip')).Hash -eq $manifest.Sha256 -and (Get-Item -LiteralPath (Join-Path $feed 'payload.zip')).Length -eq $manifest.Size) 'Signed package digest and size match the produced ZIP'
@@ -32,4 +32,10 @@ Reject {Pack 11 ([IO.Path]::GetDirectoryName($private))} 'A feed cannot contain 
 Check ((Get-FileHash -LiteralPath $manifestFile).Hash -eq $manifestHash) 'Rejected builds preserve the previously valid feed'
 [IO.File]::WriteAllText((Join-Path $feed 'keep.txt'),'preserve this unrelated file');Pack 11
 Check ((Get-Content -LiteralPath (Join-Path $feed 'keep.txt') -Raw) -eq 'preserve this unrelated file' -and (Get-Content -LiteralPath $manifestFile -Raw|ConvertFrom-Json).BuildNumber -eq 11) 'A new feed build preserves unrelated files in its output folder'
+[IO.File]::WriteAllText((Join-Path $payload 'update-state.json'),'{"Version":"0.3","Channel":"secondary-local","BuildNumber":22}')
+Pack 0
+Check ((Get-Content -LiteralPath $manifestFile -Raw|ConvertFrom-Json).BuildNumber -eq 22) 'The signed feed uses the build stamped into the installer payload'
+$archive=[IO.Compression.ZipFile]::OpenRead((Join-Path $feed 'payload.zip'))
+try{Check ($null -eq $archive.GetEntry('update-state.json')) 'The updater can install the package using its own transaction state'}finally{$archive.Dispose()}
+Reject {Pack 23} 'An existing installer build cannot be relabelled as a different feed build'
 Write-Output ('TOTAL '+$script:checks+' PASS')

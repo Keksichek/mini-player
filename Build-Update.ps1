@@ -2,7 +2,7 @@ param(
  [string]$PayloadDirectory=(Join-Path $PSScriptRoot '.build\Payload'),
  [string]$OutputDirectory=(Join-Path $PSScriptRoot 'dist\local-update'),
  [long]$BuildNumber=0,
- [string]$Version='0.19999999999999999999999999999999',
+ [string]$Version='0.3',
  [string]$Notes='Локальная тестовая сборка.',
  [string]$SigningKeyPath=(Join-Path $PSScriptRoot '.build\update-signing\private.xml'),
  [string]$PublicKeyPath=(Join-Path $PSScriptRoot 'Shared\UpdatePublicKey.xml'),
@@ -37,12 +37,19 @@ try{
   try{$existing.FromXmlString([IO.File]::ReadAllText($publicFile));if($existing.ToXmlString($false) -ne $public){throw 'The signing key does not match the trusted public update key.'}}finally{$existing.Dispose()}
  }else{[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($publicFile))|Out-Null;[IO.File]::WriteAllText($publicFile,$public,$utf8)}
  if($InitializeKeyOnly){Write-Output ('Public update key ready: '+$publicFile);return}
- if($BuildNumber -eq 0){$BuildNumber=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()}
- if($BuildNumber -le 0 -or !$Version -or $Version.Length -gt 128 -or $Version -match '[\x00-\x1F]' -or $Notes.Length -gt 8192){throw 'Invalid update build number, version or release notes.'}
  $payload=[IO.Path]::GetFullPath($PayloadDirectory).TrimEnd('\','/')
  $output=$feedLocation
  NoLinks $payload;NoLinks $output
  if(!$payload -or !(Test-Path -LiteralPath $payload -PathType Container)){throw 'Build the launcher payload before building an update package.'}
+ $stampPath=Join-Path $payload 'update-state.json'
+ NoLinks $stampPath
+ if(Test-Path -LiteralPath $stampPath -PathType Leaf){
+  $stamp=Get-Content -LiteralPath $stampPath -Raw | ConvertFrom-Json
+  if(($stamp.BuildNumber -isnot [long] -and $stamp.BuildNumber -isnot [int]) -or $stamp.BuildNumber -le 0 -or $stamp.Version -cne $Version -or $stamp.Channel -cne 'secondary-local'){throw 'Invalid build stamp in launcher payload.'}
+  if($BuildNumber -ne 0 -and $BuildNumber -ne $stamp.BuildNumber){throw 'The package build number must match the installer build number.'}
+  $BuildNumber=$stamp.BuildNumber
+ }
+ if($BuildNumber -le 0 -or !$Version -or $Version.Length -gt 128 -or $Version -match '[\x00-\x1F]' -or $Notes.Length -gt 8192){throw 'Build the launcher first or provide an explicit positive build number for an unstamped legacy payload.'}
  if($output.Equals($payload,[StringComparison]::OrdinalIgnoreCase) -or $output.StartsWith($payload+'\',[StringComparison]::OrdinalIgnoreCase) -or $payload.StartsWith($output+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'The feed and payload directories must be separate.'}
  if($privateFile.StartsWith($payload+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'A private signing key must never be included in the payload.'}
  foreach($required in @('Launcher.exe','Launcher.dll','Launcher.runtimeconfig.json','Uninstall.exe','Runtime\dotnet.exe','Catalog\widgets.json','Packages\mini-player.zip')){
@@ -60,7 +67,15 @@ try{
  [IO.Directory]::CreateDirectory($stage)|Out-Null
  try{
   $zip=Join-Path $stage 'payload.zip'
-  [IO.Compression.ZipFile]::CreateFromDirectory($payload,$zip,[IO.Compression.CompressionLevel]::Optimal,$false)
+  # Update.exe writes the state from the signed manifest when it commits.
+  $archive=[IO.Compression.ZipFile]::Open($zip,[IO.Compression.ZipArchiveMode]::Create)
+  try{
+   foreach($file in [IO.Directory]::EnumerateFiles($payload,'*',[IO.SearchOption]::AllDirectories)){
+    if($file -ieq $stampPath){continue}
+    $relative=[IO.Path]::GetRelativePath($payload,$file).Replace('\','/')
+    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$file,$relative,[IO.Compression.CompressionLevel]::Optimal)
+   }
+  }finally{$archive.Dispose()}
   $size=(Get-Item -LiteralPath $zip).Length;if($size -le 0 -or $size -gt 2000000000){throw 'The update package exceeds its allowed size.'}
   $manifest=[ordered]@{ProductId='MiniPlayer.WidgetLauncher';Channel='secondary-local';BuildNumber=$BuildNumber;Version=$Version;Package='payload.zip';Sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant();Size=$size;Notes=$Notes}
   $bytes=$utf8.GetBytes(($manifest|ConvertTo-Json -Compress -Depth 4))

@@ -20,6 +20,10 @@ public sealed partial class LauncherWindow
  bool updatePending,updateMonitorInitialized;
  Process? updateProcess;
  readonly DispatcherTimer updateMonitor=new(){Interval=TimeSpan.FromMilliseconds(300)};
+ GitHubUpdateCandidate? checkedGitHubUpdate;
+ GitHubUpdateSource? gitHubUpdates;
+ CancellationTokenSource? networkUpdateCancellation;
+ GitHubUpdateSource GitHubUpdates=>gitHubUpdates??=new GitHubUpdateSource(Path.Combine(manager.Root,".update-downloads"));
 
  static long ReadInstalledUpdateBuild(string root){
   string path=Path.Combine(root,"update-state.json");WidgetManager.RejectLinks(path);
@@ -27,20 +31,24 @@ public sealed partial class LauncherWindow
   if(new FileInfo(path).Length>65536)throw new IOException("Сведения об установленной сборке повреждены.");
   try{
    using var data=JsonDocument.Parse(File.ReadAllText(path));
-   if(data.RootElement.ValueKind!=JsonValueKind.Object||!data.RootElement.TryGetProperty("BuildNumber",out var number)||!number.TryGetInt64(out long build)||build<0)throw new IOException("Сведения об установленной сборке повреждены.");
+   if(data.RootElement.ValueKind!=JsonValueKind.Object||!data.RootElement.TryGetProperty("BuildNumber",out var number)||number.ValueKind!=JsonValueKind.Number||!number.TryGetInt64(out long build)||build<=0)throw new IOException("Сведения об установленной сборке повреждены.");
    return build;
   }catch(JsonException ex){throw new IOException("Не удалось прочитать сведения об установленной сборке.",ex);}
  }
 
  void RenderUpdateSettings(){
   var panel=new StackPanel();panel.Children.Add(Label("Обновления",17));
-  panel.Children.Add(Label("Сейчас проверяем локальные пакеты — выберите папку с обновлением на этом компьютере.",12,MutedBrush,new Thickness(0,8,0,12)));
+  panel.Children.Add(Label("Новые версии лаунчера и каталог виджетов из GitHub. Подпись пакета проверяется перед установкой.",12,MutedBrush,new Thickness(0,8,0,12)));
+  var sources=new WrapPanel{Margin=new Thickness(0,0,0,12)};panel.Children.Add(sources);
+  foreach(int mode in new[]{0,1}){var source=ActionButton(mode==0?"GitHub":"Локальная папка",()=>{int previous=preferences.UpdateSourceMode;preferences.UpdateSourceMode=mode;try{SaveHubPreferences();checkedUpdate=null;checkedGitHubUpdate=null;updateMessage="";}catch(Exception ex){preferences.UpdateSourceMode=previous;message=ex.Message;}Render();});source.Margin=new Thickness(0,0,8,0);source.Background=preferences.UpdateSourceMode==mode?ColorBrush("#30283F"):ColorBrush("#232530");source.Foreground=preferences.UpdateSourceMode==mode?AccentBrush:TextBrush;sources.Children.Add(source);}
+  AddAutomaticUpdateControl(panel);
   try{long build=ReadInstalledUpdateBuild(manager.Root);panel.Children.Add(Label(build==0?"Установлена исходная локальная сборка.":"Установленная сборка: "+build,11,MutedBrush));}
   catch(IOException){panel.Children.Add(Label("Сведения об установленной сборке недоступны.",11,ColorBrush("#F0A2AC")));}
-  panel.Children.Add(PathText(string.IsNullOrWhiteSpace(preferences.UpdateFeedDirectory)?"Папка обновлений пока не выбрана.":preferences.UpdateFeedDirectory));
+  panel.Children.Add(PathText(preferences.UpdateSourceMode==0?GitHubUpdateSource.RepositoryUrl:string.IsNullOrWhiteSpace(preferences.UpdateFeedDirectory)?"Папка обновлений пока не выбрана.":preferences.UpdateFeedDirectory));
   var actions=new WrapPanel{Margin=new Thickness(0,14,0,0)};panel.Children.Add(actions);
-  var choose=ActionButton("Выбрать папку…",ChooseUpdateFolder);choose.Margin=new Thickness(0,0,8,8);actions.Children.Add(choose);
-  var check=ActionButton("Проверить обновления",()=>RunAction(CheckForUpdatesAsync,""));check.Margin=new Thickness(0,0,0,8);check.IsEnabled=!busy&&!updatePending&&!string.IsNullOrWhiteSpace(preferences.UpdateFeedDirectory);actions.Children.Add(check);
+  if(preferences.UpdateSourceMode==1){var choose=ActionButton("Выбрать папку…",ChooseUpdateFolder);choose.Margin=new Thickness(0,0,8,8);actions.Children.Add(choose);}
+  var check=ActionButton("Проверить обновления",()=>RunAction(CheckForUpdatesAsync,""));check.Margin=new Thickness(0,0,0,8);check.IsEnabled=!busy&&!updatePending&&(preferences.UpdateSourceMode==0||!string.IsNullOrWhiteSpace(preferences.UpdateFeedDirectory));actions.Children.Add(check);
+  if(networkUpdateCancellation!=null){var cancel=ActionButton("Отменить загрузку",()=>networkUpdateCancellation?.Cancel());cancel.IsEnabled=true;cancel.Margin=new Thickness(8,0,0,8);actions.Children.Add(cancel);}
   if(!string.IsNullOrWhiteSpace(updateMessage))panel.Children.Add(Label(updateMessage,12,checkedUpdate!=null?AccentBrush:MutedBrush,new Thickness(0,6,0,0)));
   if(checkedUpdate!=null){
    if(!string.IsNullOrWhiteSpace(checkedUpdate.Notes)){string notes=checkedUpdate.Notes.Trim();if(notes.Length>900)notes=notes[..900]+"…";panel.Children.Add(Label(notes,12,MutedBrush,new Thickness(0,9,0,0)));}
@@ -66,7 +74,16 @@ public sealed partial class LauncherWindow
  }
 
  async Task CheckForUpdatesAsync(){
-  checkedUpdate=null;checkedUpdateFeed="";
+  checkedUpdate=null;checkedUpdateFeed="";checkedGitHubUpdate=null;
+  if(preferences.UpdateSourceMode==0){
+   using var cancellation=new CancellationTokenSource(TimeSpan.FromSeconds(60));networkUpdateCancellation=cancellation;
+   try{var result=await GitHubUpdates.FindAsync(ReadInstalledUpdateBuild(manager.Root),cancellation.Token);checkedGitHubUpdate=result;
+    if(result==null){updateMessage="На GitHub пока нет новой подписанной сборки для secondary.";return;}
+    checkedUpdate=result.Manifest;checkedUpdateFeed=result.FeedDirectory;updateMessage="Найдена версия "+result.Manifest.Version+". Подпись проверена. Пакет будет скачан при обновлении.";
+   }catch(OperationCanceledException){updateMessage="Проверка обновлений отменена или превышено время ожидания.";}
+   catch(Exception ex){updateMessage="Не удалось проверить GitHub: "+ex.Message;}
+   finally{networkUpdateCancellation=null;}return;
+  }
   if(string.IsNullOrWhiteSpace(preferences.UpdateFeedDirectory)){updateMessage="Сначала выберите папку с локальным обновлением.";return;}
   try{
    string feed=preferences.UpdateFeedDirectory;
@@ -82,9 +99,17 @@ public sealed partial class LauncherWindow
 
  void RequestCheckedUpdate(){
   if(busy||updatePending||checkedUpdate==null||preview)return;
-  RunAction(async()=>{
+  RunAction(InstallCheckedUpdateAsync,"");
+ }
+ async Task InstallCheckedUpdateAsync(){
+   if(checkedUpdate==null)return;
    if(UpdateHelperRunning())throw new IOException("Обновление уже выполняется. Дождитесь его завершения.");
    var expected=checkedUpdate;string feed=checkedUpdateFeed;
+   if(checkedGitHubUpdate!=null){
+    using var cancellation=new CancellationTokenSource(TimeSpan.FromMinutes(15));networkUpdateCancellation=cancellation;
+    try{await GitHubUpdates.DownloadAsync(checkedGitHubUpdate,new Progress<int>(percent=>{updateMessage="Загружаем обновление: "+percent+"%";Render();}),cancellation.Token);}
+    finally{networkUpdateCancellation=null;}
+   }
    try{await Task.Run(()=>{
      var fresh=UpdateProtocol.Read(feed);UpdateProtocol.VerifyPackage(feed,fresh);
      if(fresh.BuildNumber!=expected.BuildNumber||fresh.Version!=expected.Version||fresh.Package!=expected.Package||!string.Equals(fresh.Sha256,expected.Sha256,StringComparison.OrdinalIgnoreCase)||fresh.Size!=expected.Size)throw new IOException("Пакет изменился. Повторите проверку обновлений.");
@@ -96,10 +121,11 @@ public sealed partial class LauncherWindow
    var start=new ProcessStartInfo(helper){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=manager.Root};
    updateReport=Path.Combine(Path.GetTempPath(),"VibeWidgetsHub-update-"+Guid.NewGuid().ToString("N")+".txt");
    foreach(string value in new[]{"--update",manager.Root,feed,"--resume",string.Join(',',catalog.Where(x=>x.Available&&manager.IsRunning(x)).Select(x=>x.Id)),"--report",updateReport})start.ArgumentList.Add(value);
+   long previousAttempt=preferences.AutoUpdateAttemptBuild;preferences.AutoUpdateAttemptBuild=Math.Max(previousAttempt,expected.BuildNumber);
+   try{SaveHubPreferences();}catch{preferences.AutoUpdateAttemptBuild=previousAttempt;throw;}
    updatePending=true;
    try{updateProcess=Process.Start(start)??throw new IOException("Не удалось запустить обновление.");EnsureUpdateMonitor();updateMonitor.Start();updateMessage="Подготавливаем обновление. Дождитесь перезапуска лаунчера.";}
    catch{updatePending=false;throw;}
-  },"");
  }
 
  void EnsureUpdateMonitor(){
