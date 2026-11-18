@@ -11,6 +11,7 @@ from notes.drawing import drawing_editor
 from notes.scrollbar import HoverScrollbar
 from notes.sticky import StickyNotes
 from notes.windows import set_startup, startup_mode
+from notes.uninstall import uninstall
 
 PALETTES = {
     "light": dict(back="#EFE8DE", paper="#FFFDF7", card="#F5EEE4", ink="#2F2925",
@@ -127,6 +128,8 @@ class NotesApp:
                     padx=5).pack(side="left", padx=(0, 5))
         self.button(management, "Удалить все уведомления", self.remove_all_reminders,
                     color="accent", padx=5).pack(side="left")
+        self.button(area, "Удалить приложение", self.uninstall_app,
+                    surface="paper", color="muted", padx=5).pack(side="bottom", anchor="e")
         self.progress = self.label(area, "", color="muted", size=9)
         self.progress.pack(side="bottom", anchor="w", pady=(8, 0))
         viewport = tk.Frame(area, bg=self.c["paper"])
@@ -704,6 +707,21 @@ class NotesApp:
         dialog.grab_set()
         field.focus_set()
 
+
+    def uninstall_app(self):
+        if not messagebox.askyesno(
+            "Удалить Заметки",
+            "Удалить приложение, все заметки, рисунки, настройки и свой звук?\n"
+            "Автозапуск будет отключён. Это действие нельзя отменить.",
+            parent=self.root,
+        ):
+            return
+        try:
+            uninstall(self.settings.parent.parent)
+        except (OSError, ValueError) as error:
+            messagebox.showerror("Удаление", str(error), parent=self.root)
+            return
+        self.close()
 
     def close(self):
         self.reminders.stop()

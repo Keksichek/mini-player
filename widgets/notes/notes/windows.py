@@ -175,8 +175,11 @@ def set_startup(mode, script):
                 pass
             return
         executable = Path(sys.executable)
-        windowed = executable.with_name("pythonw.exe")
-        command = [str(windowed if windowed.is_file() else executable), str(script)]
+        if getattr(sys, "frozen", False):
+            command = [str(executable)]
+        else:
+            windowed = executable.with_name("pythonw.exe")
+            command = [str(windowed if windowed.is_file() else executable), str(script)]
         if mode == "tray":
             command.append("--tray")
         winreg.SetValueEx(key, RUN_NAME, 0, winreg.REG_SZ, subprocess.list2cmdline(command))

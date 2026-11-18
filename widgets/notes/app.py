@@ -42,9 +42,10 @@ def main() -> None:
     root.withdraw()
     root.title("Заметки")
     project = Path(__file__).resolve().parent
+    data_folder = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else project
     icon = project / "notes.ico"
     root.iconbitmap(default=str(icon))
-    store = NotesStore(project / "data" / "notes.json")
+    store = NotesStore(data_folder / "data" / "notes.json")
     reminders = ReminderService(root, store)
     hidden = "--tray" in sys.argv[1:]
     app = NotesApp(root, store, reminders, hidden=hidden)
