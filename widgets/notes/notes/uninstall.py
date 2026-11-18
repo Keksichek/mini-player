@@ -81,7 +81,8 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
     }
     Start-Sleep -Milliseconds 400
 }
-foreach ($directory in @((Join-Path $folder 'notes'), $folder)) {
+$directory = Join-Path $folder 'notes'
+if ([IO.Path]::GetFullPath($directory).StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
     if ((Test-Path -LiteralPath $directory) -and
         @(Get-ChildItem -LiteralPath $directory -Force).Count -eq 0) {
         Remove-Item -LiteralPath $directory -Force

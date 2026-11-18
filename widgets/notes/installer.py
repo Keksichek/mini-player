@@ -10,7 +10,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from notes.install_paths import shortcuts
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 
 
 def selected_path(value):
