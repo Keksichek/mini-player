@@ -4,7 +4,6 @@ from ctypes import wintypes as w
 import hashlib
 import json
 from pathlib import Path
-import sys
 import time
 
 
