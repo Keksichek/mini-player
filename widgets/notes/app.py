@@ -10,6 +10,8 @@ from notes.model import NotesStore
 from notes.reminders import ReminderService
 from notes.ui import NotesApp
 from notes.windows import Tray, focus_existing
+from notes import windows
+from notes.launcher import context, HubConnection
 
 
 def work_area(root: tk.Tk) -> tuple[int, int, int, int]:
@@ -36,19 +38,35 @@ def center_window(root: tk.Tk) -> None:
 
 
 def main() -> None:
-    if focus_existing():
-        return
+    project = Path(__file__).resolve().parent
+    folder = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else project
+    hub_root, data_folder = context(sys.argv[1:], folder)
+    connection = HubConnection(data_folder) if hub_root else None
+    try:
+        if connection:
+            if not connection.owned:
+                connection.show_existing()
+                return
+            windows.WINDOW_CLASS += "." + connection.name.rsplit(".", 1)[-1]
+        elif focus_existing():
+            return
+        run_window(project, data_folder, hub_root, connection)
+    finally:
+        if connection:
+            connection.close()
+
+
+def run_window(project, data_folder, hub_root, connection):
     root = tk.Tk()
     root.withdraw()
     root.title("Заметки")
-    project = Path(__file__).resolve().parent
-    data_folder = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else project
     icon = project / "notes.ico"
     root.iconbitmap(default=str(icon))
-    store = NotesStore(data_folder / "data" / "notes.json")
+    store = NotesStore(data_folder / "notes.json")
     reminders = ReminderService(root, store)
     hidden = "--tray" in sys.argv[1:]
     app = NotesApp(root, store, reminders, hidden=hidden)
+    app.launcher_root = hub_root
     waiting_for_tray = hidden
     root.protocol("WM_DELETE_WINDOW", app.close)
     center_window(root)
@@ -94,6 +112,8 @@ def main() -> None:
             start_hidden()
         else:
             show()
+        if connection:
+            connection.bind(root, show, app.close)
         root.mainloop()
     finally:
         if tray is not None:

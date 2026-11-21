@@ -174,6 +174,9 @@ class NotesApp:
             self.canvas.yview_scroll(-int(event.delta / 120), "units")
 
     def startup_settings(self):
+        if getattr(self, "launcher_root", None):
+            messagebox.showinfo("VibeWidgetsHub", "Автозапуск этой копии управляется в настройках VibeWidgetsHub.", parent=self.root)
+            return
         dialog = tk.Toplevel(self.root)
         dialog.title("Автозапуск")
         dialog.transient(self.root)
@@ -725,6 +728,9 @@ class NotesApp:
 
 
     def uninstall_app(self):
+        if getattr(self, "launcher_root", None):
+            messagebox.showinfo("VibeWidgetsHub", "Удалите виджет через VibeWidgetsHub → Установленные → Заметки → Удалить. Ваши записи сохранятся для повторной установки.", parent=self.root)
+            return
         if not messagebox.askyesno(
             "Удалить Заметки",
             "Удалить приложение, все заметки, рисунки, настройки и свой звук?\n"
