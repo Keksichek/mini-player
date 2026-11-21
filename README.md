@@ -1,3 +1,13 @@
+# Ветка лаунчера keksichek/launcher
+
+Лаунчер включает каталог мини-плеера и заметок. Для сборки нужен `notes.zip` из обновлённой `feature/notes-widget`:
+
+```powershell
+pwsh -File .\Build-Launcher.ps1 -NotesPackage C:\Builds\notes.zip
+```
+
+Инструкции по установке, пакетам и данным — в [Launcher/README.md](Launcher/README.md#заметки-интеграция-в-ветке-keksicheklauncher). Ветка secondary остаётся независимой. После установки хаба выберите в каталоге «Заметки» → «Установить» → «Запустить».
+
 # Mini Player
 
 ## VibeWidgetsHub alpha 0.3 · Windows x64

@@ -95,5 +95,3 @@ static class GitHubUpdateChecks
   Complete(ClientChecks());AutoChecks(args[2]);Console.WriteLine("TOTAL "+checks+" PASS");return 0;
  }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}finally{application?.Shutdown();}}
 }
-
-

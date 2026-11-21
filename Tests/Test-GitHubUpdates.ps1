@@ -24,4 +24,3 @@ $dll=Join-Path $output 'GitHubUpdateChecks.dll';$stream=[IO.File]::Create($dll);
 [IO.File]::WriteAllText((Join-Path $output 'GitHubUpdateChecks.runtimeconfig.json'),'{"runtimeOptions":{"tfm":"net10.0-windows","framework":{"name":"Microsoft.WindowsDesktop.App","version":"10.0.0"}}}')
 & dotnet $dll (Join-Path $output ('Fixture-'+[Guid]::NewGuid().ToString('N').Substring(0,8))) $testKey $probe
 if($LASTEXITCODE -ne 0){throw 'GitHub update checks failed'}
-
