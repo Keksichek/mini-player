@@ -78,7 +78,7 @@ public sealed partial class LauncherWindow
   if(preferences.UpdateSourceMode==0){
    using var cancellation=new CancellationTokenSource(TimeSpan.FromSeconds(60));networkUpdateCancellation=cancellation;
    try{var result=await GitHubUpdates.FindAsync(ReadInstalledUpdateBuild(manager.Root),cancellation.Token);checkedGitHubUpdate=result;
-    if(result==null){updateMessage="На GitHub пока нет новой подписанной сборки для secondary.";return;}
+    if(result==null){updateMessage="На GitHub пока нет новой подписанной сборки для keksichek/launcher.";return;}
     checkedUpdate=result.Manifest;checkedUpdateFeed=result.FeedDirectory;updateMessage="Найдена версия "+result.Manifest.Version+". Подпись проверена. Пакет будет скачан при обновлении.";
    }catch(OperationCanceledException){updateMessage="Проверка обновлений отменена или превышено время ожидания.";}
    catch(Exception ex){updateMessage="Не удалось проверить GitHub: "+ex.Message;}
@@ -144,3 +144,4 @@ public sealed partial class LauncherWindow
   };
  }
 }
+

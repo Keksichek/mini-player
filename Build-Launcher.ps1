@@ -2,11 +2,21 @@ param(
  [string]$OutputDirectory = (Join-Path $PSScriptRoot 'dist'),
  [string]$RuntimeCache = (Join-Path $PSScriptRoot '.build\downloads'),
  [switch]$SkipInstaller,
+ [string]$NotesPackage = (Join-Path $PSScriptRoot ".build\notes.zip"),
  [long]$BuildNumber = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 )
 $ErrorActionPreference='Stop'
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Run this build script with PowerShell 7.' }
 if ($BuildNumber -le 0) { throw 'BuildNumber must be positive.' }
+if(!(Test-Path -LiteralPath $NotesPackage -PathType Leaf)){throw 'Pass -NotesPackage <notes.zip> built from feature/notes-widget. See Launcher/README.md.'}
+$NotesPackage=(Resolve-Path -LiteralPath $NotesPackage).Path
+$notesArchive=[IO.Compression.ZipFile]::OpenRead($NotesPackage)
+try{
+ if(!$notesArchive.GetEntry('Notes.exe') -or !$notesArchive.GetEntry('hub-widget.json')){throw 'This is not a hub-compatible Notes package. Rebuild notes.zip from feature/notes-widget.'}
+ $reader=[IO.StreamReader]::new($notesArchive.GetEntry('hub-widget.json').Open())
+ try{$notesManifest=$reader.ReadToEnd()|ConvertFrom-Json}finally{$reader.Dispose()}
+ if($notesManifest.Id -ne 'notes' -or $notesManifest.Protocol -ne 1){throw 'Unsupported Notes hub protocol.'}
+}finally{$notesArchive.Dispose()}
 $projectRoot=$PSScriptRoot
 $buildRoot=Join-Path $projectRoot '.build'
 $payload=Join-Path $buildRoot 'Payload'
@@ -62,6 +72,7 @@ foreach($name in @('Assets','Catalog','Packages','Runtime')){New-Item -ItemType 
 Copy-Item -LiteralPath (Join-Path $projectRoot 'screenshots\Лаванда.png') -Destination (Join-Path $payload 'Assets\mini-player.png') -Force
 if(Test-Path -LiteralPath (Join-Path $projectRoot 'Launcher\Assets')){Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Launcher\Assets') | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payload 'Assets') -Recurse -Force}}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Launcher\catalog.json') -Destination (Join-Path $payload 'Catalog\widgets.json') -Force
+Copy-Item -LiteralPath $NotesPackage -Destination (Join-Path $payload 'Packages\notes.zip') -Force
 $widgetZip=Join-Path $payload 'Packages\mini-player.zip'
 if(Test-Path -LiteralPath $widgetZip){Remove-Item -LiteralPath $widgetZip -Force}
 [IO.Compression.ZipFile]::CreateFromDirectory($widget,$widgetZip,[IO.Compression.CompressionLevel]::Optimal,$false)
@@ -77,7 +88,7 @@ foreach($package in $packages){
  if((Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash -ine $package.Hash){throw ('Runtime checksum mismatch: '+$package.Name)}
  [IO.Compression.ZipFile]::ExtractToDirectory($archive,(Join-Path $payload 'Runtime'),$true)
 }
-$buildState = [ordered]@{BuildNumber=$BuildNumber; Version='0.3'; Channel='secondary-local'}
+$buildState = [ordered]@{BuildNumber=$BuildNumber; Version='0.3'; Channel='keksichek-local'}
 [IO.File]::WriteAllText((Join-Path $payload 'update-state.json'),($buildState | ConvertTo-Json -Compress))
 if(!$SkipInstaller){& (Join-Path $projectRoot 'Installer\Build.ps1') -PayloadDirectory $payload -OutputDirectory $OutputDirectory}
 Write-Host ('Payload: '+$payload)

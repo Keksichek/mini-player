@@ -45,7 +45,7 @@ try{
  NoLinks $stampPath
  if(Test-Path -LiteralPath $stampPath -PathType Leaf){
   $stamp=Get-Content -LiteralPath $stampPath -Raw | ConvertFrom-Json
-  if(($stamp.BuildNumber -isnot [long] -and $stamp.BuildNumber -isnot [int]) -or $stamp.BuildNumber -le 0 -or $stamp.Version -cne $Version -or $stamp.Channel -cne 'secondary-local'){throw 'Invalid build stamp in launcher payload.'}
+  if(($stamp.BuildNumber -isnot [long] -and $stamp.BuildNumber -isnot [int]) -or $stamp.BuildNumber -le 0 -or $stamp.Version -cne $Version -or $stamp.Channel -cne 'keksichek-local'){throw 'Invalid build stamp in launcher payload.'}
   if($BuildNumber -ne 0 -and $BuildNumber -ne $stamp.BuildNumber){throw 'The package build number must match the installer build number.'}
   $BuildNumber=$stamp.BuildNumber
  }
@@ -77,7 +77,7 @@ try{
    }
   }finally{$archive.Dispose()}
   $size=(Get-Item -LiteralPath $zip).Length;if($size -le 0 -or $size -gt 2000000000){throw 'The update package exceeds its allowed size.'}
-  $manifest=[ordered]@{ProductId='MiniPlayer.WidgetLauncher';Channel='secondary-local';BuildNumber=$BuildNumber;Version=$Version;Package='payload.zip';Sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant();Size=$size;Notes=$Notes}
+  $manifest=[ordered]@{ProductId='MiniPlayer.WidgetLauncher';Channel='keksichek-local';BuildNumber=$BuildNumber;Version=$Version;Package='payload.zip';Sha256=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant();Size=$size;Notes=$Notes}
   $bytes=$utf8.GetBytes(($manifest|ConvertTo-Json -Compress -Depth 4))
   [IO.File]::WriteAllBytes((Join-Path $stage 'update.json'),$bytes)
   $signature=$rsa.SignData($bytes,[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)
@@ -91,3 +91,4 @@ try{
   if([IO.Directory]::Exists($stage) -and [IO.Directory]::GetFileSystemEntries($stage).Length -eq 0){[IO.Directory]::Delete($stage)}
  }
 }finally{$rsa.Dispose()}
+

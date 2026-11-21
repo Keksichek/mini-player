@@ -183,7 +183,7 @@ public sealed partial class LauncherWindow : Window
   }
   else
   {
-   var sample=new StackPanel{VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center};sample.Children.Add(Label("♫",48,AccentBrush));sample.Children.Add(Label("Музыка всегда рядом",15));art.Child=sample;
+   var sample=new StackPanel{VerticalAlignment=VerticalAlignment.Center,HorizontalAlignment=HorizontalAlignment.Center};sample.Children.Add(Label(widget.Id=="notes"?"▤":"♫",48,AccentBrush));sample.Children.Add(Label(widget.Id=="notes"?"Мысли и планы под рукой":"Музыка всегда рядом",15));art.Child=sample;
   }
   panel.Children.Add(art);
   var details=new StackPanel{Margin=new Thickness(24,20,24,22)};panel.Children.Add(details);
@@ -193,7 +193,7 @@ public sealed partial class LauncherWindow : Window
   var primary=ActionButton(busy?"Подождите…":installed?(running?"Показать":"Запустить"):managed?"Переустановить":"Установить",()=>{if(installed)RunAction(()=>manager.LaunchAsync(widget),"Виджет запущен. Его можно оставить работать после закрытия лаунчера.");else RunAction(async()=>{if(managed)await manager.RemoveAsync(widget);await manager.InstallAsync(widget);},"Готово. Виджет установлен и готов к запуску.");},true);primary.MinWidth=132;primary.Margin=new Thickness(0,0,9,0);controls.Children.Add(primary);
   if(managed)
   {
-   if(installed){var settings=ActionButton("Настройки",()=>RunAction(()=>manager.LaunchAsync(widget,"--settings"),"Настройки открыты в окне виджета."));settings.Margin=new Thickness(0,0,9,0);controls.Children.Add(settings);}
+   if(installed&&widget.SupportsSettings){var settings=ActionButton("Настройки",()=>RunAction(()=>manager.LaunchAsync(widget,"--settings"),"Настройки открыты в окне виджета."));settings.Margin=new Thickness(0,0,9,0);controls.Children.Add(settings);}
    var remove=ActionButton("Удалить",()=>ConfirmRemove(widget));remove.Foreground=ColorBrush("#F0A2AC");remove.Background=Brushes.Transparent;controls.Children.Add(remove);
   }
   var version=Label(widget.Version+"  ·  Рабочий стол Windows",10,ColorBrush("#777B91"),new Thickness(0,14,0,0));details.Children.Add(version);

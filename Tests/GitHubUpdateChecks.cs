@@ -28,7 +28,7 @@ static class GitHubUpdateChecks
  static HttpResponseMessage Body(byte[] body)=>new(HttpStatusCode.OK){Content=new ByteArrayContent(body)};
  static byte[] Manifest(long build=10)=>JsonSerializer.SerializeToUtf8Bytes(new{ProductId=UpdateProtocol.ProductId,Channel=UpdateProtocol.Channel,BuildNumber=build,Version="0.2",Package="payload.zip",Sha256=Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),Size=bytes.Length,Notes="Own fixture"});
  static byte[] Sign(byte[] metadata){using var rsa=RSA.Create();rsa.FromXmlString(File.ReadAllText(key));return Encoding.UTF8.GetBytes(Convert.ToBase64String(rsa.SignData(metadata,HashAlgorithmName.SHA256,RSASignaturePadding.Pkcs1)));}
- static byte[] Releases(string branch="secondary",bool draft=false,bool assets=true,string host=Asset)=>JsonSerializer.SerializeToUtf8Bytes(new[]{new{draft,target_commitish=branch,published_at="2026-11-16T00:00:00Z",assets=assets?new[]{"update.json","update.sig","payload.zip"}.Select(n=>new{name=n,state="uploaded",browser_download_url=host+n}).ToArray():Array.Empty<object>()}});
+ static byte[] Releases(string branch="keksichek/launcher",bool draft=false,bool assets=true,string host=Asset)=>JsonSerializer.SerializeToUtf8Bytes(new[]{new{draft,target_commitish=branch,published_at="2026-11-16T00:00:00Z",assets=assets?new[]{"update.json","update.sig","payload.zip"}.Select(n=>new{name=n,state="uploaded",browser_download_url=host+n}).ToArray():Array.Empty<object>()}});
  static Network Fixture(byte[]? releases=null,byte[]? manifest=null,byte[]? payload=null){
   byte[] metadata=manifest??Manifest();var network=new Network();network.Handler=(request,_)=>Task.FromResult(Body(request.RequestUri!.Host=="api.github.com"?releases??Releases():request.RequestUri.AbsolutePath.EndsWith("update.json")?metadata:request.RequestUri.AbsolutePath.EndsWith("update.sig")?Sign(metadata):payload??bytes));return network;
  }
@@ -41,7 +41,7 @@ static class GitHubUpdateChecks
    Check(net.Requests.All(x=>x.StartsWith("https://")),"All requests use HTTPS");
    Check(await source.FindAsync(10,CancellationToken.None)==null,"Installed and older signed builds are not offered");
   }
-  foreach(var value in new[]{Releases("main"),Releases(draft:true),Releases(assets:false)})using(var net=Fixture(value))using(var source=Source(net))Check(await source.FindAsync(0,CancellationToken.None)==null&&net.Requests.Count==1,"Main, draft and installer-only releases are ignored");
+  foreach(var value in new[]{Releases("main"),Releases("secondary"),Releases(draft:true),Releases(assets:false)})using(var net=Fixture(value))using(var source=Source(net))Check(await source.FindAsync(0,CancellationToken.None)==null&&net.Requests.Count==1,"Main, draft and installer-only releases are ignored");
   using(var net=Fixture(Releases(host:"https://example.invalid/")))using(var source=Source(net))await Reject(async()=>{await source.FindAsync(0,CancellationToken.None);},"Foreign release asset addresses are rejected");
   using(var net=Fixture())using(var source=Source(net)){
    var original=net.Handler!;net.Handler=(r,t)=>r.RequestUri!.AbsolutePath.EndsWith("update.sig")?Task.FromResult(Body(Encoding.UTF8.GetBytes("broken"))):original(r,t);
@@ -90,8 +90,10 @@ static class GitHubUpdateChecks
   }finally{window.RequestShutdown();source.Dispose();net.Dispose();}
  }
  [STAThread]static int Main(string[] args){Application? application=null;try{
-  if(args[0]=="--live"){using var source=new GitHubUpdateSource(Path.GetFullPath(args[1]));var found=source.FindAsync(0,new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token).GetAwaiter().GetResult();Console.WriteLine(found==null?"GitHub read-only check: connected; no signed secondary update is published yet.":"GitHub read-only check: found verified build "+found.Manifest.BuildNumber);return 0;}
+  if(args[0]=="--live"){using var source=new GitHubUpdateSource(Path.GetFullPath(args[1]));var found=source.FindAsync(0,new CancellationTokenSource(TimeSpan.FromSeconds(60)).Token).GetAwaiter().GetResult();Console.WriteLine(found==null?"GitHub read-only check: connected; no signed keksichek/launcher update is published yet.":"GitHub read-only check: found verified build "+found.Manifest.BuildNumber);return 0;}
   root=Path.GetFullPath(args[0]);key=Path.GetFullPath(args[1]);Directory.CreateDirectory(root);application=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
   Complete(ClientChecks());AutoChecks(args[2]);Console.WriteLine("TOTAL "+checks+" PASS");return 0;
  }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}finally{application?.Shutdown();}}
 }
+
+

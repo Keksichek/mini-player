@@ -54,7 +54,7 @@ internal sealed class GitHubUpdateSource:IDisposable
    var bytes=await ReadAsync(new Uri("https://api.github.com/repos/Keksichek/mini-player/releases?per_page=30&page="+page),2*1024*1024,token).ConfigureAwait(false);
    using var data=JsonDocument.Parse(bytes);if(data.RootElement.ValueKind!=JsonValueKind.Array)throw new IOException("Ответ списка релизов GitHub повреждён.");
    foreach(var release in data.RootElement.EnumerateArray().OrderByDescending(x=>x.TryGetProperty("published_at",out var date)?date.GetString():"")){
-    if(!release.TryGetProperty("draft",out var draft)||draft.ValueKind!=JsonValueKind.False||!release.TryGetProperty("target_commitish",out var branch)||branch.GetString()!="secondary"||!release.TryGetProperty("assets",out var assets)||assets.ValueKind!=JsonValueKind.Array)continue;
+    if(!release.TryGetProperty("draft",out var draft)||draft.ValueKind!=JsonValueKind.False||!release.TryGetProperty("target_commitish",out var branch)||branch.GetString()!="keksichek/launcher"||!release.TryGetProperty("assets",out var assets)||assets.ValueKind!=JsonValueKind.Array)continue;
     Uri? Asset(string name){var matches=assets.EnumerateArray().Where(x=>x.TryGetProperty("name",out var n)&&n.GetString()==name&&x.TryGetProperty("state",out var state)&&state.GetString()=="uploaded").ToArray();return matches.Length==1?AssetUri(matches[0].GetProperty("browser_download_url").GetString()??""):null;}
     var json=Asset("update.json");var signature=Asset("update.sig");if(json==null||signature==null)continue;
     byte[] metadata=await ReadAsync(json,65536,token).ConfigureAwait(false),signed=await ReadAsync(signature,16384,token).ConfigureAwait(false);

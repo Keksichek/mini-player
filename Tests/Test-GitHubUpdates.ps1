@@ -15,8 +15,13 @@ $files=@(Get-ChildItem (Join-Path $repo 'Launcher\Source') -Filter '*.cs' -File 
 [Microsoft.CodeAnalysis.SyntaxTree[]]$trees=@(foreach($file in $files){[Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([IO.File]::ReadAllText($file))})
 $options=[Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions]::new([Microsoft.CodeAnalysis.OutputKind]::ConsoleApplication).WithNullableContextOptions([Microsoft.CodeAnalysis.NullableContextOptions]::Enable).WithMainTypeName('GitHubUpdateChecks')
 $compilation=[Microsoft.CodeAnalysis.CSharp.CSharpCompilation]::Create('GitHubUpdateChecks',$trees,$references,$options)
-$publicFile=Join-Path $repo 'Shared\UpdatePublicKey.xml';[Microsoft.CodeAnalysis.ResourceDescription[]]$resources=@([Microsoft.CodeAnalysis.ResourceDescription]::new('UpdatePublicKey.xml',[Func[IO.Stream]]{[IO.File]::OpenRead($publicFile)}.GetNewClosure(),$true))
+# Fixture keys are generated for this test run; no release signing key is required.
+$testKey=Join-Path $output 'fixture-private.xml'
+$publicFile=Join-Path $output 'fixture-public.xml'
+$rsa=[Security.Cryptography.RSA]::Create(2048)
+try{[IO.File]::WriteAllText($testKey,$rsa.ToXmlString($true));[IO.File]::WriteAllText($publicFile,$rsa.ToXmlString($false))}finally{$rsa.Dispose()}[Microsoft.CodeAnalysis.ResourceDescription[]]$resources=@([Microsoft.CodeAnalysis.ResourceDescription]::new('UpdatePublicKey.xml',[Func[IO.Stream]]{[IO.File]::OpenRead($publicFile)}.GetNewClosure(),$true))
 $dll=Join-Path $output 'GitHubUpdateChecks.dll';$stream=[IO.File]::Create($dll);try{$result=$compilation.Emit($stream,$null,$null,$null,$resources);if(!$result.Success){$result.Diagnostics|ForEach-Object ToString;throw 'GitHub checks compilation failed'}}finally{$stream.Dispose()}
 [IO.File]::WriteAllText((Join-Path $output 'GitHubUpdateChecks.runtimeconfig.json'),'{"runtimeOptions":{"tfm":"net10.0-windows","framework":{"name":"Microsoft.WindowsDesktop.App","version":"10.0.0"}}}')
-& dotnet $dll (Join-Path $output ('Fixture-'+[Guid]::NewGuid().ToString('N').Substring(0,8))) (Join-Path $repo '.build\update-signing\private.xml') $probe
+& dotnet $dll (Join-Path $output ('Fixture-'+[Guid]::NewGuid().ToString('N').Substring(0,8))) $testKey $probe
 if($LASTEXITCODE -ne 0){throw 'GitHub update checks failed'}
+

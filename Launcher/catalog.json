@@ -7,5 +7,16 @@
     "Package": "mini-player.zip",
     "Executable": "App/MiniPlayer.exe",
     "Available": true
+  },
+  {
+    "Id": "notes",
+    "Name": "Заметки",
+    "Description": "Записи, рисунки, стикеры и напоминания на рабочем столе.",
+    "Version": "0.1.5",
+    "Package": "notes.zip",
+    "Executable": "Notes.exe",
+    "Available": true,
+    "LaunchKind": "exe",
+    "SupportsSettings": false
   }
 ]

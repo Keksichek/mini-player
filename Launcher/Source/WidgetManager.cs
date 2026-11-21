@@ -21,6 +21,8 @@ public sealed record Widget
  public string Version { get; init; } = "";
  public string Package { get; init; } = "";
  public string Executable { get; init; } = "";
+ public string LaunchKind { get; init; } = "dotnet";
+ public bool SupportsSettings { get; init; } = true;
  public bool Available { get; init; }
 }
 
@@ -46,11 +48,13 @@ public sealed class WidgetManager
    if(widget.Available)
    {
     if(string.IsNullOrWhiteSpace(widget.Name)||string.IsNullOrWhiteSpace(widget.Version))throw new InvalidDataException("В каталоге не хватает названия или версии виджета.");
+    ValidateLaunchKind(widget);
     _=Child(Path.Combine(root,"Packages"),widget.Package); _=Executable(widget);
    }
   }
   return catalog;
  }
+ public static void ValidateLaunchKind(Widget widget) { if(widget.LaunchKind is not ("dotnet" or "exe"))throw new InvalidDataException("Неизвестный тип запуска виджета."); }
  public static void ValidateId(string id)
  {
   if(!Regex.IsMatch(id,"^[a-z0-9][a-z0-9-]{0,63}$",RegexOptions.CultureInvariant))throw new InvalidDataException("Недопустимое имя папки виджета.");
@@ -144,6 +148,8 @@ public sealed class WidgetManager
  public void Launch(Widget widget,string? mode=null)=>LaunchAsync(widget,mode).GetAwaiter().GetResult();
  public async Task LaunchAsync(Widget widget,string? mode=null)
  {
+  ValidateLaunchKind(widget);
+  if(mode=="--settings"&&!widget.SupportsSettings)throw new InvalidOperationException("Настройки доступны в самом виджете.");
   if(!IsInstalled(widget))throw new InvalidOperationException("Сначала установите виджет.");
   RejectLinks(WidgetDirectory(widget));RejectLinks(DataDirectory(widget));
   if(IsRunning(widget)){
@@ -156,12 +162,16 @@ public sealed class WidgetManager
    }
    if(IsRunning(widget))throw new IOException("Виджет ещё запускается. Подождите несколько секунд и повторите действие.");
   }
-  var runtime=Path.Combine(root,"Runtime","dotnet.exe");
-  if(!File.Exists(runtime))throw new FileNotFoundException("Не хватает компонентов запуска. Переустановите лаунчер.");
-  var executable=Executable(widget);var dll=Path.ChangeExtension(executable,".dll");
-  if(!File.Exists(dll))throw new FileNotFoundException("Файлы виджета повреждены. Удалите и установите его заново.");
-  var start=new ProcessStartInfo(runtime){WorkingDirectory=Path.GetDirectoryName(executable)!,UseShellExecute=false,CreateNoWindow=true};
-  start.ArgumentList.Add(dll);
+  var executable=Executable(widget);
+  var start=new ProcessStartInfo {WorkingDirectory=Path.GetDirectoryName(executable)!,UseShellExecute=false,CreateNoWindow=true};
+  if(widget.LaunchKind=="exe")start.FileName=executable;
+  else{
+   var runtime=Path.Combine(root,"Runtime","dotnet.exe");
+   if(!File.Exists(runtime))throw new FileNotFoundException("Не хватает компонентов запуска. Переустановите лаунчер.");
+   var dll=Path.ChangeExtension(executable,".dll");
+   if(!File.Exists(dll))throw new FileNotFoundException("Файлы виджета повреждены. Удалите и установите его заново.");
+   start.FileName=runtime;start.ArgumentList.Add(dll);
+  }
   start.ArgumentList.Add("--data-dir");start.ArgumentList.Add(DataDirectory(widget));
   start.ArgumentList.Add("--launcher-root");start.ArgumentList.Add(root);
   start.ArgumentList.Add("--show-existing");

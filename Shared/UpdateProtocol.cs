@@ -25,7 +25,7 @@ namespace VibeWidgetsUpdates
 
  public static class UpdateProtocol
  {
-  public const string ProductId="MiniPlayer.WidgetLauncher",Channel="secondary-local";
+  public const string ProductId="MiniPlayer.WidgetLauncher",Channel="keksichek-local";
   public const long MaxPackageSize=2000000000;
   static readonly UTF8Encoding Utf8=new UTF8Encoding(false,true);
   public static string PublicKey(){
@@ -102,3 +102,4 @@ namespace VibeWidgetsUpdates
   }
  }
 }
+
