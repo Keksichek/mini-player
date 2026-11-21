@@ -23,5 +23,8 @@ $compilation=[Microsoft.CodeAnalysis.CSharp.CSharpCompilation]::Create('SourceSe
 $dll=Join-Path $OutputDirectory 'SourceSelectionChecks.dll';$stream=[IO.File]::Create($dll)
 try{$result=$compilation.Emit($stream);if(!$result.Success){$result.Diagnostics | ForEach-Object ToString;throw 'Source selection checks compilation failed.'}}finally{$stream.Dispose()}
 Copy-Item -LiteralPath (Join-Path $OutputDirectory 'MiniPlayer.runtimeconfig.json') -Destination (Join-Path $OutputDirectory 'SourceSelectionChecks.runtimeconfig.json')
-& dotnet $dll (Join-Path $OutputDirectory 'test-data')
+$fixture=Join-Path $OutputDirectory 'test-data'
+$catalog=New-Item -ItemType Directory -Path (Join-Path $fixture 'Catalog') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'Launcher\catalog.json') -Destination (Join-Path $catalog.FullName 'widgets.json') -Force
+& dotnet $dll $fixture (Join-Path $projectRoot '.build\Payload\Launcher.dll')
 if($LASTEXITCODE -ne 0){throw 'Source selection checks failed.'}

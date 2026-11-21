@@ -30,7 +30,7 @@ function Compile-App([string]$Name,[string]$SourceDirectory,[string]$Destination
   [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($file.FullName),[Text.Encoding]::UTF8),$parse,$file.FullName)
  })
  if(!$Player){$shared=Join-Path $projectRoot 'Shared\UpdateProtocol.cs';$trees+=[Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($shared),[Text.Encoding]::UTF8),$parse,$shared)}
- if($Player){foreach($presetSourceName in @('WidgetPreset.cs','PresetSurface.cs','PresetPreview.cs')){$shared=Join-Path $projectRoot ('Launcher\Source\'+$presetSourceName);$trees+=[Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($shared),[Text.Encoding]::UTF8),$parse,$shared)}}
+ if($Player){foreach($presetSourceName in @('WidgetPreset.cs','PresetSurface.cs','PresetPreview.cs','TrackPreviewProtocol.cs')){$shared=Join-Path $projectRoot ('Launcher\Source\'+$presetSourceName);$trees+=[Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText([Microsoft.CodeAnalysis.Text.SourceText]::From([IO.File]::ReadAllText($shared),[Text.Encoding]::UTF8),$parse,$shared)}}
  [Microsoft.CodeAnalysis.MetadataReference[]]$references=$baseReferences
  if($Player){foreach($dependencyName in @('Microsoft.Windows.SDK.NET.dll','WinRT.Runtime.dll')){$references+=[Microsoft.CodeAnalysis.MetadataReference]::CreateFromFile((Join-Path $projectRoot ('App\'+$dependencyName)))}}
  $options=[Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions]::new([Microsoft.CodeAnalysis.OutputKind]::WindowsApplication).WithOptimizationLevel([Microsoft.CodeAnalysis.OptimizationLevel]::Release).WithNullableContextOptions([Microsoft.CodeAnalysis.NullableContextOptions]::Enable)
@@ -53,7 +53,7 @@ foreach($name in @('MiniPlayer.exe','MiniPlayer.deps.json','MiniPlayer.runtimeco
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Source\Fonts') -Destination (Join-Path $widget 'App') -Recurse -Force
 Compile-App 'MiniPlayer' (Join-Path $projectRoot 'Source') (Join-Path $widget 'App\MiniPlayer.dll') -Player
-[IO.File]::WriteAllText((Join-Path $widget 'App\preset-format.json'),'{"Version":4}')
+[IO.File]::WriteAllText((Join-Path $widget 'App\preset-format.json'),'{"Version":8}')
 Compile-App 'Launcher' (Join-Path $projectRoot 'Launcher\Source') (Join-Path $payload 'Launcher.dll')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'App\MiniPlayer.runtimeconfig.json') -Destination (Join-Path $payload 'Launcher.runtimeconfig.json') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Source\Fonts') -Destination $payload -Recurse -Force

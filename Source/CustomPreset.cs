@@ -54,6 +54,29 @@ public sealed partial class Player
   try{File.WriteAllText(temporary,JsonSerializer.Serialize(new{Sha256=hash,Success=success,Error=error}));File.Move(temporary,path,true);}finally{if(File.Exists(temporary))File.Delete(temporary);}
  }
  void DisposeCustomSurface(){customSurface?.Dispose();customSurface=null;}
+ void ApplySavedAppearance(PresetStore store,WidgetPreset preset){
+  using var applyLock=store.AcquireApplyLock();
+  InstallAndStorePreset(store,preset);
+ }
+ void InstallAndStorePreset(PresetStore store,WidgetPreset preset){
+  var previous=customPreset;var previousSurface=customSurface;bool suspended=customPresetSuspended;
+  try{
+   InstallCustomPreset(preset);
+   store.Apply(preset);
+  }catch{
+   // A failed decode leaves the old surface in place. If a later step failed,
+   // restore the previous visible appearance, including unsaved classic edits.
+   if(customSurface!=previousSurface){
+    customPreset=previous;customPresetSuspended=suspended;ApplyAppearance();
+   }
+   throw;
+  }
+  customPresetStamp=-1;
+  try{
+   var file=new FileInfo(store.ActivePath);
+   customPresetLength=file.Length;customPresetStamp=file.LastWriteTimeUtc.Ticks;
+  }catch(IOException){}catch(UnauthorizedAccessException){}
+ }
  void InstallCustomPreset(WidgetPreset preset){
   if(CustomPresetRoot is not string root||Content is not Border body||body.Child is not StackPanel stack)return;
   var surface=new PresetSurface(root);

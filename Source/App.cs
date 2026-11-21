@@ -55,7 +55,7 @@ public sealed partial class Player : Window
  List<GlobalSystemMediaTransportControlsSession> sessions=new();
  bool refreshing,busy,closing,shownByUser=false,refreshSourceLabels; string track="";
  readonly string settingsPath=System.IO.Path.Combine(LaunchContext.DataDirectory,"settings.json");
- record Settings(double X,double Y,bool Pin,bool Auto,string Source,string AudioTarget="",string AudioSource="",bool MovementLocked=false,PauseMode OnPause=PauseMode.KeepVisible,bool ClickThrough=false);
+ record Settings(double X,double Y,bool Pin,bool Auto,string Source,string AudioTarget="",string AudioSource="",bool MovementLocked=false,PauseMode OnPause=PauseMode.KeepVisible,bool ClickThrough=false,AnchorPoint Anchor=AnchorPoint.Free,string AnchorMonitor="",int AnchorGap=16);
  string preferred="";
  readonly Slider volumeSlider=new(){Minimum=0,Maximum=100,Height=28,IsMoveToPointEnabled=true,IsEnabled=false};
  readonly TextBlock volumeLabel=new(){Text="—",Width=46,TextAlignment=TextAlignment.Right,VerticalAlignment=VerticalAlignment.Center};
@@ -84,7 +84,8 @@ public sealed partial class Player : Window
   }catch{if(request==seekRequest)status.Text="Перемотка недоступна.";}
   finally{if(request==seekRequest){seekPending=false;RenderTimeline();}}
  }
- public Player()
+ public Player():this(true){}
+ Player(bool showTray)
  {
   FontFamily=PlayerApplication.InterfaceFont;FontWeight=FontWeights.Bold;
   Title="Mini Player · 0.1";Width=380;Height=260;ResizeMode=ResizeMode.NoResize;WindowStyle=WindowStyle.None;AllowsTransparency=true;Background=Brushes.Transparent;ShowInTaskbar=false;Topmost=true;
@@ -108,7 +109,7 @@ public sealed partial class Player : Window
    if(dragOrigin is not Point start)return;
    var delta=e.GetPosition(this)-start;
    if(Math.Abs(delta.X)<SystemParameters.MinimumHorizontalDragDistance&&Math.Abs(delta.Y)<SystemParameters.MinimumVerticalDragDistance)return;
-   dragOrigin=null;CancelRecoveryAnimation();System.Windows.Input.Mouse.Capture(null);e.Handled=true;DragMove();Save();
+   dragOrigin=null;CancelRecoveryAnimation();ClearAnchorForDrag();System.Windows.Input.Mouse.Capture(null);e.Handled=true;DragMove();Save();
   };
   var stack=new StackPanel();body.Child=stack;
   var header=new DockPanel{Margin=new Thickness(0,0,0,4)};
@@ -136,10 +137,10 @@ public sealed partial class Player : Window
   prev.Click+=async(_,_)=>await Command(0);play.Click+=async(_,_)=>await Command(1);next.Click+=async(_,_)=>await Command(2);
   volumeSlider.Template=seek.Template;
   volumeSlider.ValueChanged+=(_,_)=>{volumeLabel.Text=$"{volumeSlider.Value:0}%";if(!volumeSync&&volumeSlider.IsEnabled&&audioTarget.Length>0&&audioSource==(session?.SourceAppUserModelId??"")){try{Audio.Set(audioTarget,volumeSlider.Value);}catch{audioHint.Text="Не удалось изменить громкость приложения.";}}};
-  sources.SelectionChanged+=async(_,_)=>{if(refreshing)return;session=sources.SelectedIndex>=0?sessions[sources.SelectedIndex]:null;ResetTimeline();ResetRepeat();ResetVolumeSource();SetMediaPlaying(false);preferred=session?.SourceAppUserModelId??"";track="";cover.Source=null;ObservePause(false);Save();UpdateSourceBehavior();await Refresh();};
+  sources.SelectionChanged+=async(_,_)=>{if(refreshing)return;session=sources.SelectedIndex>=0?sessions[sources.SelectedIndex]:null;ResetTimeline();ResetRepeat();ResetVolumeSource();SetMediaPlaying(false);preferred=session?.SourceAppUserModelId??"";track="";cover.Source=null;ObservePause(false);Save();UpdateSourcePreset(preferred);UpdateSourceBehavior();await Refresh();};
   Width=410;Foreground=Brushes.DimGray;SizePlayer();
   auto.Checked+=(_,_)=>{shownByUser=false;Save();UpdateSourceBehavior();};auto.Unchecked+=(_,_)=>{shownByUser=true;Save();};
-  tray=new(){Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppContext.BaseDirectory,"Player.ico")),Text="Mini Player",Visible=true};
+  tray=new(){Icon=new System.Drawing.Icon(System.IO.Path.Combine(AppContext.BaseDirectory,"Player.ico")),Text="Mini Player",Visible=showTray};
   var menu=new System.Windows.Forms.ContextMenuStrip();menu.Items.Add("Показать плеер",null,(_,_)=>Dispatcher.Invoke(()=>ReturnToScreen()));AddTrayRestore(menu);menu.Items.Add("Настройки",null,(_,_)=>Dispatcher.Invoke(()=>OpenSettings()));menu.Items.Add("Кастомизация",null,(_,_)=>Dispatcher.Invoke(()=>Customize()));menu.Items.Add("Выход",null,(_,_)=>Dispatcher.Invoke(()=>{closing=true;Close();}));tray.ContextMenuStrip=menu;tray.DoubleClick+=(_,_)=>ReturnToScreen();
   motionTimer.Tick+=(_,_)=>RenderMotion();
   IsVisibleChanged+=(_,_)=>{SyncMotion();UpdateRecoveryArrow();};
@@ -178,7 +179,7 @@ public sealed partial class Player : Window
  {
   if(busy||closing)return;
   if((IsVisible||settingsWindow?.IsVisible==true)&&!VolumeIsBeingEdited)RefreshAudioTargets();
-  if(manager==null)return;busy=true;
+  if(manager==null){UpdateSourcePreset("");return;}busy=true;
   try{
    var list=manager.GetSessions().ToList();
    if(refreshSourceLabels||!list.SequenceEqual(sessions)){
@@ -198,12 +199,15 @@ public sealed partial class Player : Window
     sources.SelectedIndex=index;sources.IsEnabled=true;session=index>=0?sessions[index]:null;
     if(session!=old){track="";ResetTimeline();ResetRepeat();ResetVolumeSource();ObservePause(false);}refreshing=false;FillSourcePicker();
    }
+   UpdateSourcePreset(session?.SourceAppUserModelId??"");
    if(session==null){ObservePause(false);ResetTimeline();ResetRepeat();ResetVolumeSource();SetMediaPlaying(false);title.Text="Включите музыку или видео";artist.Text="Нажмите на название для выбора источника";cover.Source=null;seek.IsEnabled=false;prev.IsEnabled=play.IsEnabled=next.IsEnabled=false;return;}
    var playback=session.GetPlaybackInfo();ObservePause(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Paused);SynchronizeRepeat(playback);SynchronizeTimeline(session.GetTimelineProperties(),playback);SetMediaPlaying(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing);play.Content=mediaPlaying?"Ⅱ":"▶";
    prev.IsEnabled=playback.Controls.IsPreviousEnabled;next.IsEnabled=playback.Controls.IsNextEnabled;
    play.IsEnabled=playback.Controls.IsPlayPauseToggleEnabled||(playback.PlaybackStatus==GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing?playback.Controls.IsPauseEnabled:playback.Controls.IsPlayEnabled);
    prev.ToolTip=prev.IsEnabled?"Предыдущий":"Сайт не предоставляет предыдущий трек";next.ToolTip=next.IsEnabled?"Следующий":"Сайт не предоставляет следующий трек";
    var requestedSession=session;var media=await requestedSession.TryGetMediaPropertiesAsync();if(closing||!Equals(requestedSession,session))return;var key=session.SourceAppUserModelId+"|"+media.Title+"|"+media.Artist;
+   lastTrackRead=playback.PlaybackStatus is not (GlobalSystemMediaTransportControlsSessionPlaybackStatus.Closed or GlobalSystemMediaTransportControlsSessionPlaybackStatus.Stopped)
+    && (!string.IsNullOrWhiteSpace(media.Title)||!string.IsNullOrWhiteSpace(media.Artist))?Environment.TickCount64:0;
    title.Text=string.IsNullOrEmpty(media.Title)?"Без названия":media.Title;artist.Text=media.Artist;
    if(key!=track){
     track=key;
@@ -245,7 +249,7 @@ public sealed partial class Player : Window
    // Leave only the artwork pending; playback and seeking are still valid.
   }
  }
- void Save(){try{System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(settingsPath)!);System.IO.File.WriteAllText(settingsPath,System.Text.Json.JsonSerializer.Serialize(new Settings(Left,Top,Topmost,auto.IsChecked==true,preferred,audioTarget,audioSource,movementLocked,OnPause:pauseMode,ClickThrough:clickThrough)));}catch{}}
+ void Save(){try{System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(settingsPath)!);System.IO.File.WriteAllText(settingsPath,System.Text.Json.JsonSerializer.Serialize(new Settings(Left,Top,Topmost,auto.IsChecked==true,preferred,audioTarget,audioSource,movementLocked,OnPause:pauseMode,ClickThrough:clickThrough,Anchor:anchor,AnchorMonitor:anchorMonitor,AnchorGap:anchorGap)));}catch{}}
  void ImportLegacySettings(){
   var target=System.IO.Path.GetDirectoryName(settingsPath)!;
   var legacy=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(target)!,"YandexMiniPlayer");
@@ -257,8 +261,11 @@ public sealed partial class Player : Window
    }
   }
  }
- void LoadSettings(){try{var s=System.Text.Json.JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(settingsPath));if(s!=null){Left=Math.Clamp(s.X,SystemParameters.VirtualScreenLeft,SystemParameters.VirtualScreenLeft+SystemParameters.VirtualScreenWidth-Width);Top=Math.Clamp(s.Y,SystemParameters.VirtualScreenTop,SystemParameters.VirtualScreenTop+SystemParameters.VirtualScreenHeight-Height);Topmost=s.Pin;preferred=s.Source;audioTarget="";audioSource="";movementLocked=s.MovementLocked;SetClickThrough(s.ClickThrough,false);pauseMode=Enum.IsDefined(s.OnPause)?s.OnPause:PauseMode.KeepVisible;auto.IsChecked=s.Auto;}}catch{}UpdatePin();UpdateMovementLock(); }
+ void LoadSettings(){try{var s=System.Text.Json.JsonSerializer.Deserialize<Settings>(System.IO.File.ReadAllText(settingsPath));if(s!=null){
+   anchor=Enum.IsDefined(s.Anchor)?s.Anchor:AnchorPoint.Free;anchorMonitor=s.AnchorMonitor??"";anchorGap=Math.Clamp(s.AnchorGap,0,128);
+   Left=Math.Clamp(s.X,SystemParameters.VirtualScreenLeft,SystemParameters.VirtualScreenLeft+SystemParameters.VirtualScreenWidth-Width);Top=Math.Clamp(s.Y,SystemParameters.VirtualScreenTop,SystemParameters.VirtualScreenTop+SystemParameters.VirtualScreenHeight-Height);Topmost=s.Pin;preferred=s.Source;audioTarget="";audioSource="";movementLocked=s.MovementLocked;SetClickThrough(s.ClickThrough,false);pauseMode=Enum.IsDefined(s.OnPause)?s.OnPause:PauseMode.KeepVisible;auto.IsChecked=s.Auto;}}catch{}UpdatePin();UpdateMovementLock(); }
  [STAThread] public static void Main(string[] args){
+  if(args.Length==1&&args[0]=="--compare-frame"){Environment.ExitCode=RenderComparisonFrame();return;}
   if(args.Length==2&&args[0]=="--self-test"){
    var applicationTest=new PlayerApplication();var player=new Player();player.tray.Visible=false;
    try{

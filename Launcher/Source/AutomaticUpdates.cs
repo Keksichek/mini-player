@@ -22,10 +22,10 @@ public sealed partial class LauncherWindow
   try{await CheckForUpdatesAsync();if(preferences.AutoUpdateEnabled&&checkedUpdate!=null&&checkedUpdate.BuildNumber>preferences.AutoUpdateAttemptBuild)await InstallCheckedUpdateAsync();}
   catch(OperationCanceledException){updateMessage="Автоматическая загрузка отменена.";}
   catch(Exception ex){updateMessage="Автообновление не завершено: "+ex.Message;}
-  finally{automaticUpdateChecking=false;busy=false;Render();if(pendingStop)RequestShutdown();}
+  finally{automaticUpdateChecking=false;busy=false;Render();if(pendingStop)RequestShutdown();else ResumeWorkshopRequest();}
  }
  void AddAutomaticUpdateControl(StackPanel panel){
-  var toggle=new CheckBox{Content=preferences.AutoUpdateEnabled?"Автообновление: ВКЛ":"Автообновление: ВЫКЛ",IsChecked=preferences.AutoUpdateEnabled,Margin=new Thickness(0,0,0,8),IsEnabled=!updatePending};
+  var toggle=new CheckBox{Content=preferences.AutoUpdateEnabled?"Автообновление: ВКЛ":"Автообновление: ВЫКЛ",IsChecked=preferences.AutoUpdateEnabled,Margin=new Thickness(0,0,0,8),IsEnabled=!updatePending&&(!busy||automaticUpdateChecking||networkUpdateCancellation!=null)};
   System.Windows.Automation.AutomationProperties.SetName(toggle,"Автообновление");
   toggle.Click+=(_,_)=>{
    bool previous=preferences.AutoUpdateEnabled;preferences.AutoUpdateEnabled=toggle.IsChecked==true;

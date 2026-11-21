@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Text.Json;
+using WidgetLauncher;
 namespace MiniPlayer;
 public sealed partial class Player
 {
@@ -22,7 +23,8 @@ public sealed partial class Player
  static readonly string[] Themes={"Светлая","Тёмная","Minecraft","Ретро","Лаванда","Ночной океан","Лес","Кофе","Персик","Терминал","Стекло","Винил","Закат","Карманный LCD"};
  static readonly string[] Accents={"#7FA6D9","#8BE878","#55DCCB","#F0AA60","#D99BEF","#EE829A"};
  static bool ValidColor(string value){try{return value.Length==7&&value[0]=='#'&&ColorConverter.ConvertFromString(value) is Color;}catch{return false;}}
- void LoadAppearance(){try{var a=JsonSerializer.Deserialize<Appearance>(File.ReadAllText(AppearancePath));if(a!=null&&Themes.Contains(a.Theme)&&ValidColor(a.Accent)&&(a.BorderColor==null||ValidColor(a.BorderColor))&&(a.BackgroundColor==null||ValidColor(a.BackgroundColor)))appearance=a with{Sensitivity=Math.Clamp(a.Sensitivity,0,3),Scale=Math.Clamp(a.Scale,0.85,1.4),Alpha=Math.Clamp(a.Alpha,0.65,1),Round=Math.Clamp(a.Round,0,26),BorderWidth=Math.Clamp(a.BorderWidth,0,4),CoverSize=Math.Clamp(a.CoverSize,40,64)};}catch{}ApplyAppearance();RefreshCustomPreset(true);}
+ void LoadClassicAppearance(){try{var a=JsonSerializer.Deserialize<Appearance>(File.ReadAllText(AppearancePath));if(a!=null&&Themes.Contains(a.Theme)&&ValidColor(a.Accent)&&(a.BorderColor==null||ValidColor(a.BorderColor))&&(a.BackgroundColor==null||ValidColor(a.BackgroundColor)))appearance=a with{Sensitivity=Math.Clamp(a.Sensitivity,0,3),Scale=Math.Clamp(a.Scale,0.85,1.4),Alpha=Math.Clamp(a.Alpha,0.65,1),Round=Math.Clamp(a.Round,0,26),BorderWidth=Math.Clamp(a.BorderWidth,0,4),CoverSize=Math.Clamp(a.CoverSize,40,64)};}catch{}}
+ void LoadAppearance(){LoadClassicAppearance();ApplyAppearance();RefreshCustomPreset(true);}
  void ApplyAppearance(){
   CancelRecoveryAnimation();
   if(Content is not Border body)return;
@@ -48,7 +50,7 @@ public sealed partial class Player
  }
  void Customize(bool preview=false){
   if(customizeWindow!=null){if(!preview)FocusPreferencesWindow(customizeWindow);return;}
-  var original=appearance;var originalPreset=customPreset?.Copy();customPresetSuspended=originalPreset!=null;
+  var original=appearance;var originalPreset=customPreset?.Copy();
   bool saved=false, syncing=false;
   var ink=PreferencesText;var muted=PreferencesMuted;var purple=PreferencesAccent;
   var w=CreatePreferencesWindow("Оформление",720);
@@ -58,6 +60,19 @@ public sealed partial class Player
   TextBlock Text(string value,double size,Brush color)=>new(){Text=value,FontSize=size,Foreground=color,TextWrapping=TextWrapping.Wrap};
   header.Children.Add(Text("Оформление плеера",27,ink));
   var subtitle=Text("Изменения сразу видны в плеере.",12,muted);subtitle.Margin=new Thickness(0,5,0,0);header.Children.Add(subtitle);
+  bool HasPreview()=>customPresetSuspended||appearance!=original;
+  Action? refreshPresetActions=null;
+  void UpdateCaption(){
+   if(CustomPresetRoot!=null)subtitle.Text=HasPreview()?"Предпросмотр темы · "+appearance.Theme:
+    originalPreset!=null?"Активный пресет · "+originalPreset.Name:"Активная тема · "+appearance.Theme;
+   refreshPresetActions?.Invoke();
+  }
+  void PreviewClassic(bool rebuild=true){
+   customPresetSuspended=originalPreset!=null;UpdateCaption();
+   if(rebuild||customPresetSuspended&&customSurface!=null)ApplyAppearance();
+  }
+  // Filled after the classic controls are initialized below.
+  var presetHeader=new StackPanel();header.Children.Add(presetHeader);
   Button Btn(object label)=>PreferencesButton(label);
   void Mark(Button b,bool selected)=>MarkPreferencesButton(b,selected);
   var nav=new System.Windows.Controls.Primitives.UniformGrid{Rows=1,Margin=new Thickness(0,14,0,10)};header.Children.Add(nav);
@@ -70,7 +85,7 @@ public sealed partial class Player
   var gallery=new System.Windows.Controls.Primitives.UniformGrid{Columns=2};
   var colors=new StackPanel();var geometry=new StackPanel();
   var pages=new FrameworkElement[]{gallery,colors,geometry};var tabs=new Button[3];
-  void Page(int index){scroll.Content=pages[index];scroll.ScrollToTop();for(int i=0;i<tabs.Length;i++)Mark(tabs[i],i==index);}
+  void Page(int index){scroll.Content=pages[index];scroll.ScrollToTop();for(int i=0;i<tabs.Length;i++)Mark(tabs[i],i==index);refreshPresetActions?.Invoke();}
   string[] names={"Темы","Цвета","Размер и детали"};
   for(int i=0;i<3;i++){int index=i;var b=tabs[i]=Btn(names[i]);b.Margin=new Thickness(2);nav.Children.Add(b);b.Click+=(_,_)=>Page(index);}
   var cards=new System.Collections.Generic.Dictionary<string,Button>();
@@ -89,7 +104,7 @@ public sealed partial class Player
   var editor=new DockPanel();palette.Children.Add(editor);var wheel=new ColorWheel{Margin=new Thickness(0,4,16,2)};DockPanel.SetDock(wheel,Dock.Left);editor.Children.Add(wheel);
   var values=new StackPanel{VerticalAlignment=VerticalAlignment.Center};editor.Children.Add(values);var code=Text("",15,ink);values.Children.Add(code);values.Children.Add(Text("Яркость",12,muted));var brightness=new Slider{Minimum=0,Maximum=1};values.Children.Add(brightness);
   brightness.ValueChanged+=(_,_)=>{if(!syncing){wheel.Value=brightness.Value;wheel.Publish();}};
-  wheel.Changed+=hex=>{appearance=role switch{0=>appearance with{Accent=hex},1=>appearance with{BorderColor=hex},_=>appearance with{BackgroundColor=hex}};code.Text=hex;for(int i=0;i<3;i++)samples[i].Background=BrushOf(ColorAt(i));ApplyAppearance();};
+  wheel.Changed+=hex=>{appearance=role switch{0=>appearance with{Accent=hex},1=>appearance with{BorderColor=hex},_=>appearance with{BackgroundColor=hex}};code.Text=hex;for(int i=0;i<3;i++)samples[i].Background=BrushOf(ColorAt(i));PreviewClassic();};
   var form=Card(geometry,"Размер и форма");var updates=new System.Collections.Generic.List<Action>();
   FrameworkElement Setting(string name,double min,double max,double step,Func<double> read,Action<double> write,bool percent=false,StackPanel? section=null,bool rebuild=true){
    var group=new StackPanel();(section??form).Children.Add(group);
@@ -97,7 +112,7 @@ public sealed partial class Player
    var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true};group.Children.Add(slider);
    System.Windows.Automation.AutomationProperties.SetName(slider,name);
    void Update(){val.Text=percent?$"{read()*100:0}%":$"{read():0} px";}
-   updates.Add(()=>{slider.Value=read();Update();});slider.ValueChanged+=(_,_)=>{if(syncing)return;write(slider.Value);Update();if(rebuild)ApplyAppearance();};
+   updates.Add(()=>{slider.Value=read();Update();});slider.ValueChanged+=(_,_)=>{if(syncing)return;write(slider.Value);Update();PreviewClassic(rebuild);};
    return group;
   }
   Setting("Масштаб",.85,1.4,.05,()=>appearance.Scale,v=>appearance=appearance with{Scale=v},true);
@@ -111,9 +126,10 @@ public sealed partial class Player
   var info=Card(geometry,"Информация о треке");
   var artistCheck=new CheckBox{Content="Исполнитель",Margin=new Thickness(0,8,0,0)};var timeCheck=new CheckBox{Content="Время трека",Margin=new Thickness(0,6,0,0)};
   info.Children.Add(artistCheck);info.Children.Add(timeCheck);
-  artistCheck.Click+=(_,_)=>{appearance=appearance with{ShowArtist=artistCheck.IsChecked==true};ApplyAppearance();};
-  timeCheck.Click+=(_,_)=>{appearance=appearance with{ShowTime=timeCheck.IsChecked==true};ApplyAppearance();};
-  void Sync(){syncing=true;foreach(var pair in cards)Mark(pair.Value,pair.Key==appearance.Theme);for(int i=0;i<3;i++){samples[i].Background=BrushOf(ColorAt(i));Mark(chips[i],role==i);}code.Text=ColorAt(role);wheel.SetColor(code.Text);brightness.Value=wheel.Value;foreach(var action in updates)action();coverSetting.Visibility=StudioFace.For(appearance.Theme).SceneIsBackground?Visibility.Collapsed:Visibility.Visible;artistCheck.IsChecked=appearance.ShowArtist;timeCheck.IsChecked=appearance.ShowTime;syncing=false;}
+  artistCheck.Click+=(_,_)=>{appearance=appearance with{ShowArtist=artistCheck.IsChecked==true};PreviewClassic();};
+  timeCheck.Click+=(_,_)=>{appearance=appearance with{ShowTime=timeCheck.IsChecked==true};PreviewClassic();};
+  void MarkThemeCards(){foreach(var pair in cards)Mark(pair.Value,pair.Key==appearance.Theme&&(originalPreset==null||customPresetSuspended));}
+  void Sync(){syncing=true;MarkThemeCards();for(int i=0;i<3;i++){samples[i].Background=BrushOf(ColorAt(i));Mark(chips[i],role==i);}code.Text=ColorAt(role);wheel.SetColor(code.Text);brightness.Value=wheel.Value;foreach(var action in updates)action();coverSetting.Visibility=StudioFace.For(appearance.Theme).SceneIsBackground?Visibility.Collapsed:Visibility.Visible;artistCheck.IsChecked=appearance.ShowArtist;timeCheck.IsChecked=appearance.ShowTime;syncing=false;}
   foreach(var name in new[]{"Винил","Закат","Карманный LCD"}.Concat(Themes.Where(t=>t is not ("Винил" or "Закат" or "Карманный LCD")))){
    var content=new StackPanel();var img=new Image{Height=80,Stretch=Stretch.Uniform};
    using(var stream=typeof(Player).Assembly.GetManifestResourceStream("preview."+name+".png")){
@@ -121,13 +137,31 @@ public sealed partial class Player
    }
    content.Children.Add(img);var label=Text(name,13,ink);label.HorizontalAlignment=HorizontalAlignment.Center;label.Margin=new Thickness(0,9,0,0);content.Children.Add(label);
    var b=Btn(content);System.Windows.Automation.AutomationProperties.SetName(b,name);b.Margin=new Thickness(3);cards.Add(name,b);gallery.Children.Add(b);
-   b.Click+=(_,_)=>{if(appearance.Theme==name&&originalPreset==null)return;appearance=appearance with{Theme=name,Accent=ThemeAccent(name),BorderColor=ThemeAccent(name),BackgroundColor=null,Round=name=="Minecraft"?0:20,BorderWidth=name=="Minecraft"?3:1};Sync();ApplyAppearance();};
+   b.Click+=(_,_)=>{if(appearance.Theme==name&&originalPreset==null)return;appearance=appearance with{Theme=name,Accent=ThemeAccent(name),BorderColor=ThemeAccent(name),BackgroundColor=null,Round=name=="Minecraft"?0:20,BorderWidth=name=="Minecraft"?3:1};PreviewClassic();Sync();};
   }
   foreach(var chip in chips)chip.Click+=(_,_)=>{role=(int)chip.Tag;Sync();};
-  reset.Click+=(_,_)=>{appearance=new();Sync();ApplyAppearance();};
+  reset.Click+=(_,_)=>{appearance=new();PreviewClassic();Sync();};
   cancel.Click+=(_,_)=>w.Close();cancel.IsCancel=true;
-  save.Click+=(_,_)=>{try{Directory.CreateDirectory(Path.GetDirectoryName(AppearancePath)!);File.WriteAllText(AppearancePath,JsonSerializer.Serialize(appearance));CommitStandardAppearance();ApplyAppearance();saved=true;w.Close();}catch(Exception ex){MessageBox.Show(w,ex.Message,"Не удалось сохранить");}};
-  w.Closed+=(_,_)=>{if(!saved){appearance=original;customPreset=originalPreset;customPresetSuspended=false;ApplyAppearance();}customizeWindow=null;};
-  Sync();Page(0);if(!preview){shownByUser=true;Show();FocusPreferencesWindow(w);}
+  save.Click+=(_,_)=>{try{if(HasPreview()||originalPreset==null)SaveClassicAppearance();saved=true;w.Close();}catch(Exception ex){MessageBox.Show(w,ex.Message,"Не удалось сохранить");}};
+  w.Closed+=(_,_)=>{if(!saved&&HasPreview()){appearance=original;customPreset=originalPreset;customPresetSuspended=false;ApplyAppearance();}customizeWindow=null;};
+  if(CustomPresetRoot is string root)refreshPresetActions=AddAppearancePresets(presetHeader,w,root,preset=>{
+   originalPreset=preset.Copy();appearance=original;UpdateCaption();Sync();
+  },HasPreview,()=>{
+   SaveClassicAppearance();original=appearance;originalPreset=null;UpdateCaption();Sync();
+  });
+  UpdateCaption();Sync();Page(0);if(!preview){shownByUser=true;Show();FocusPreferencesWindow(w);}
+ }
+
+ void SaveClassicAppearance(){
+  using var applyLock=CustomPresetRoot is string root?new PresetStore(root).AcquireApplyLock():null;
+  Directory.CreateDirectory(Path.GetDirectoryName(AppearancePath)!);
+  string temporary=AppearancePath+"."+Guid.NewGuid().ToString("N"),backup=temporary+".bak";
+  try{
+   File.WriteAllText(temporary,JsonSerializer.Serialize(appearance));
+   bool replace=File.Exists(AppearancePath);
+   if(replace)File.Replace(temporary,AppearancePath,backup);else File.Move(temporary,AppearancePath);
+   try{CommitStandardAppearance();}
+   catch{if(replace)File.Move(backup,AppearancePath,true);else File.Delete(AppearancePath);throw;}
+  }finally{if(File.Exists(temporary))File.Delete(temporary);if(File.Exists(backup))File.Delete(backup);}
  }
 }

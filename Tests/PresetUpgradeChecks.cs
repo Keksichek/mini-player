@@ -14,7 +14,7 @@ static class PresetUpgradeChecks {
   var manager=new WidgetManager(root);var widget=manager.ReadCatalog().Single(w=>w.Id=="mini-player");string app=Path.GetDirectoryName(manager.Executable(widget))!,format=Path.Combine(app,"preset-format.json"),dll=Path.Combine(app,"MiniPlayer.dll"),package=Path.Combine(root,"Packages",widget.Package),backup=package+".own-test-backup";
   try{
    if(!manager.IsInstalled(widget))await manager.InstallAsync(widget);await manager.StopAsync(widget);
-   string extra=Path.Combine(app,"own-extra.txt"),settings=Path.Combine(manager.DataDirectory(widget),"own-settings.txt");Directory.CreateDirectory(Path.GetDirectoryName(settings)!);File.WriteAllText(extra,"extra fixture");File.WriteAllText(settings,"settings fixture");string initial=Hash(dll);File.Delete(format);
+   string extra=Path.Combine(app,"own-extra.txt"),settings=Path.Combine(manager.DataDirectory(widget),"own-settings.txt");Directory.CreateDirectory(Path.GetDirectoryName(settings)!);File.WriteAllText(extra,"extra fixture");File.WriteAllText(settings,"settings fixture");string initial=Hash(dll);File.WriteAllText(format,"{\"Version\":7}");
    await PresetWidgetUpgrade.EnsureAsync(manager,widget);
    Check(manager.IsRunning(widget)&&File.Exists(format),"Old installed widget receives preset capability and restarts");Check(Hash(dll)==initial&&File.ReadAllText(extra)=="extra fixture"&&File.ReadAllText(settings)=="settings fixture","Upgrade preserves settings and extra installed files");
    string active=Path.Combine(root,"Data","Customization","mini-player","active.json");Directory.CreateDirectory(Path.GetDirectoryName(active)!);File.WriteAllText(active,JsonSerializer.Serialize(new{Name="Own IPC fixture",Shape="star",Width=420,Height=280,FontSize=60}));

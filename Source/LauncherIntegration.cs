@@ -109,7 +109,10 @@ public sealed partial class Player
     startupComplete=true;ready.Set();if(player.customPreset!=null)presetApplied.Set();
     while(startupActions.Count>0&&!application.Dispatcher.HasShutdownStarted)startupActions.Dequeue()();
    };
+   using var previewStop=new CancellationTokenSource();
+   if(LaunchContext.LauncherRoot!=null)_=player.ListenForWorkshopAsync(previewStop.Token);
    try{application.Run(player);}finally{
+    previewStop.Cancel();
     foreach(var wait in waits)wait.Unregister(null!);foreach(var signal in events)signal.Dispose();
     mutex.ReleaseMutex();
    }

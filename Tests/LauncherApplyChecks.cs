@@ -29,6 +29,15 @@ static class LauncherApplyChecks {
   Check(Hash(active)==before&&File.GetLastWriteTimeUtc(ackPath)>oldAck,"Reapplying byte-identical preset waits for a fresh acknowledgement");
   string library=Path.Combine(Path.GetDirectoryName(active)!,"Presets",(string)presetType.GetProperty("Id")!.GetValue(preset)!+".json");
   string savedHash=Hash(library);
+  var storeType=assembly.GetType("WidgetLauncher.PresetStore",true)!;
+  var receiverStore=Activator.CreateInstance(storeType,new[]{root,"mini-player"})!;
+  using((IDisposable)Call(receiverStore,"AcquireApplyLock")!){
+   var acknowledgement=Hash(ackPath);
+   bool busy=false;
+   try{Await((Task)Call(launcher,"ApplyCurrentPresetAsync")!);}catch(IOException ex){busy=ex.Message.Contains("другом окне");}
+   Check(busy && Hash(active)==before && Hash(ackPath)==acknowledgement && Hash(library)==savedHash,
+    "Applying from the launcher during a widget change preserves its active preset, acknowledgement and library");
+  }
   string unavailable="Media/"+Guid.NewGuid().ToString("N")+Guid.NewGuid().ToString("N")+".png";
   presetType.GetProperty("MediaPath")!.SetValue(preset,unavailable);bool failed=false;try{Await((Task)Call(launcher,"ApplyCurrentPresetAsync")!);}catch(IOException){failed=true;}
   Check(failed&&Hash(active)==before,"Actual launcher callback restores previous active preset when media cannot be applied");
@@ -42,7 +51,6 @@ static class LauncherApplyChecks {
    Check(failed&&Hash(active)==before&&Hash(library)==savedHash,"Player-side decoding failure rolls back the active file and leaves the library intact");
   }finally{File.Delete(brokenImage);}
 
-  var storeType=assembly.GetType("WidgetLauncher.PresetStore",true)!;
   var exchange=assembly.GetType("WidgetLauncher.PresetExchange",true)!;
   string sender=Path.Combine(root,"Data","mini-player","sharing-test-"+Guid.NewGuid().ToString("N"));
   Directory.CreateDirectory(sender);
@@ -53,13 +61,18 @@ static class LauncherApplyChecks {
   var senderStore=Activator.CreateInstance(storeType,new[]{sender,"mini-player"})!;
   string mediaPath=(string)Call(senderStore,"ImportMedia",png)!;
   presetType.GetProperty("MediaPath")!.SetValue(preset,mediaPath);
+  Call(preset,"Normalize");
+  var layers=presetType.GetProperty("LayerOrder")!;
+  var order=((string[])layers.GetValue(preset)!).Reverse().ToArray();
+  layers.SetValue(preset,order);
   string code=(string)exchange.GetMethod("ExportCode")!.Invoke(null,new[]{senderStore,preset})!;
-  var receiverStore=Activator.CreateInstance(storeType,new[]{root,"mini-player"})!;
   var received=exchange.GetMethod("ImportCode")!.Invoke(null,new object[]{receiverStore,code})!;
   windowType.GetField("presetDraft",Flags)!.SetValue(launcher,received);
   Await((Task)Call(launcher,"ApplyCurrentPresetAsync")!);
   using(var ack=JsonDocument.Parse(File.ReadAllText(ackPath)))
    Check(ack.RootElement.GetProperty("Success").GetBoolean() && ack.RootElement.GetProperty("Sha256").GetString()!.Equals(Hash(active),StringComparison.OrdinalIgnoreCase) && Hash((string)Call(receiverStore,"ResolveMedia",mediaPath)!)==Hash(png),"Preset shared from a separate library with embedded PNG applies to the installed running player");
+  using(var applied=JsonDocument.Parse(File.ReadAllText(active)))
+   Check(order.Length>=2 && applied.RootElement.GetProperty("LayerOrder").EnumerateArray().Select(id=>id.GetString()).SequenceEqual(order),"Sharing and applying a preset keeps its exact layer order");
   Check(Hash(library)==savedHash,"Applying the imported copy preserves the original library entry");
   Console.WriteLine("TOTAL "+count+" PASS");return 0;
  }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}finally{if(manager!=null&&widget!=null)try{Await((Task)Call(manager,"StopAsync",widget)!);}catch{}try{launcher?.Close();}catch{}app?.Shutdown();}}

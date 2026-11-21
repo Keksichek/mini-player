@@ -5,6 +5,7 @@
   <Compile Include="../Launcher/Source/WidgetPreset.cs" Link="Preset/WidgetPreset.cs" />
   <Compile Include="../Launcher/Source/PresetSurface.cs" Link="Preset/PresetSurface.cs" />
   <Compile Include="../Launcher/Source/PresetPreview.cs" Link="Preset/PresetPreview.cs" />
+  <Compile Include="../Launcher/Source/TrackPreviewProtocol.cs" Link="Preset/TrackPreviewProtocol.cs" />
   <Content Include="Fonts/Onest-Bold.ttf" CopyToOutputDirectory="PreserveNewest" />
   <Content Include="Fonts/OFL.txt" CopyToOutputDirectory="PreserveNewest" />
  </ItemGroup>

@@ -47,7 +47,7 @@ public sealed partial class LauncherWindow
   presetDraft=preset;
   presetDraftDirty=true;
   SavePresetDraft();
-  presetHistory.Clear();
+  ResetPresetHistory();
   customizationMode="saved";
   customizationStep="editor";
  }

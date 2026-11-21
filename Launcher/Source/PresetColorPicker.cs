@@ -17,10 +17,18 @@ public sealed partial class LauncherWindow
   presetColorPicker?.Close();
   var dialog=new PresetColorDialog(this,label,initial,changed,
    BackgroundBrush,PanelBrush,TextBrush,MutedBrush,AccentBrush,ColorBrush("#2B2C3A"),ColorBrush("#232530"));
-  presetColorPicker=dialog;
+  var editorAtOpen=presetEditorGrid;
+  presetColorPicker=dialog;BeginPresetGesture(dialog);
+  if(presetEditorGrid!=null)presetEditorGrid.IsEnabled=false;
+  if(largePresetWindow!=null)largePresetWindow.IsEnabled=false;
   void OwnerClosed(object? sender,EventArgs args)=>dialog.Close();
   Closed+=OwnerClosed;
-  dialog.Closed+=(_,_)=>{Closed-=OwnerClosed;if(ReferenceEquals(presetColorPicker,dialog))presetColorPicker=null;};
+  dialog.Closed+=(_,_)=>{Closed-=OwnerClosed;EndPresetGesture(dialog);
+   if(ReferenceEquals(presetColorPicker,dialog))presetColorPicker=null;
+   if(presetEditorGrid!=null)presetEditorGrid.IsEnabled=!busy&&!updatePending;
+   if(largePresetWindow!=null)largePresetWindow.IsEnabled=true;
+   if(presetEditorGrid!=null&&!ReferenceEquals(editorAtOpen,presetEditorGrid))Render();
+   ResumeWorkshopRequest();};
   dialog.Show();
  }
 }

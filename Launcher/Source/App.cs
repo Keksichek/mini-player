@@ -32,6 +32,8 @@ public sealed class LauncherApp : Application
     string helper=Path.Combine(root,".update-transaction","old","Update.exe");if(!File.Exists(helper))helper=Path.Combine(root,"Update.exe");
     WidgetManager.RejectLinks(helper);var recovery=new ProcessStartInfo(helper){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=root};recovery.ArgumentList.Add("--recover");recovery.ArgumentList.Add(root);using var process=Process.Start(recovery)??throw new IOException("Не удалось запустить восстановление обновления.");return 0;
    }
+   string? backupWarning=null;
+   if(!HubBackupRestore.RecoverIfNeeded(root,warning=>backupWarning=warning))return 0;
    string identity="Local\\WidgetLauncher."+Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(root).ToUpperInvariant())))[..16];
    bool preview=args.Length>=2&&args[0]=="--preview";
    bool automatic=Array.IndexOf(args,"--autostart")>=0;
@@ -47,14 +49,15 @@ public sealed class LauncherApp : Application
     foreach(var widget in installed.Where(x=>resume.Contains(x.Id)&&widgets.IsInstalled(x)&&!widgets.IsRunning(x))){try{widgets.LaunchAsync(widget).GetAwaiter().GetResult();}catch(Exception ex){resumeErrors.Add(widget.Name+": "+ex.Message);}}
    }
    if(healthAttempt&&resumeErrors.Count>0)return 3;
-   if(automatic&&!display)return 0;
+   if(automatic&&!display&&backupWarning==null)return 0;
    bool remove=args.Length==2&&args[0]=="--remove-widget"&&args[1]=="mini-player";
+   bool editPreset=args.Length==1&&args[0]=="--edit-mini-player-preset";
    using var mutex=new Mutex(true,identity,out bool first);
    if(!first&&!preview)
    {
     if(healthAttempt)return 4;
     if(automatic)return 0;
-    string eventName=identity+(remove?".RemoveMiniPlayer":".Show");
+    string eventName=identity+(editPreset?".EditMiniPlayerPreset":remove?".RemoveMiniPlayer":".Show");
     for(int attempt=0;attempt<30;attempt++)
     {
      if(EventWaitHandle.TryOpenExisting(eventName,out var existing)){using(existing)existing.Set();return 0;}
@@ -62,6 +65,8 @@ public sealed class LauncherApp : Application
     }
     throw new IOException("Лаунчер ещё запускается. Повторите попытку через несколько секунд.");
    }
+   // Queue a second activation while WPF is still constructing this installation's window.
+   using var editPresetEvent=preview?null:new EventWaitHandle(false,EventResetMode.AutoReset,identity+".EditMiniPlayerPreset");
    var app=new LauncherApp{ShutdownMode=ShutdownMode.OnMainWindowClose};
    var window=new LauncherWindow(root,preview,preview&&args.Length>2?args[2]:"catalog");
    app.SessionEnding+=(_,_)=>window.PrepareForSystemShutdown();
@@ -69,7 +74,8 @@ public sealed class LauncherApp : Application
     if(app.Dispatcher.HasShutdownStarted||!window.IsVisible)return;
     if(EventWaitHandle.TryOpenExisting("Local\\WidgetLauncher.UpdateHealth."+healthToken,out var ready))using(ready)ready.Set();
    }),DispatcherPriority.ApplicationIdle);
-   if(resumeErrors.Count>0)window.ShowStartupWarning("Лаунчер перенесён. Не удалось возобновить некоторые виджеты: "+string.Join("; ",resumeErrors));
+   if(backupWarning!=null)resumeErrors.Insert(0,backupWarning);
+   if(resumeErrors.Count>0)window.ShowStartupWarning(string.Join(Environment.NewLine,resumeErrors));
    if(preview)
    {
     var surface=(FrameworkElement)window.Content;surface.Measure(new Size(window.Width,window.Height));surface.Arrange(new Rect(0,0,window.Width,window.Height));surface.UpdateLayout();
@@ -83,9 +89,11 @@ public sealed class LauncherApp : Application
    var waits=new[]{
     ThreadPool.RegisterWaitForSingleObject(show,(_,_)=>app.Dispatcher.BeginInvoke(window.BringForward),null,Timeout.Infinite,false),
     ThreadPool.RegisterWaitForSingleObject(stop,(_,_)=>app.Dispatcher.BeginInvoke(window.RequestShutdown),null,Timeout.Infinite,false),
-    ThreadPool.RegisterWaitForSingleObject(removeEvent,(_,_)=>app.Dispatcher.BeginInvoke(window.RequestMiniPlayerRemoval),null,Timeout.Infinite,false)
+    ThreadPool.RegisterWaitForSingleObject(removeEvent,(_,_)=>app.Dispatcher.BeginInvoke(window.RequestMiniPlayerRemoval),null,Timeout.Infinite,false),
+    ThreadPool.RegisterWaitForSingleObject(editPresetEvent!,(_,_)=>app.Dispatcher.BeginInvoke(window.OpenMiniPlayerWorkshop),null,Timeout.Infinite,false)
    };
    if(remove)window.Loaded+=(_,_)=>window.RequestMiniPlayerRemoval();
+   if(editPreset)window.Loaded+=(_,_)=>window.OpenMiniPlayerWorkshop();
    try{return app.Run(window);}
    finally{foreach(var wait in waits)wait.Unregister(null!);}
   }
@@ -96,10 +104,11 @@ public sealed class LauncherApp : Application
 public sealed partial class LauncherWindow : Window
 {
  readonly Brush BackgroundBrush,PanelBrush,MutedBrush,AccentBrush,TextBrush;
- readonly HubPreferences preferences;
+ HubPreferences preferences;
  readonly WidgetManager manager;
  readonly List<Widget> catalog;
  readonly StackPanel content=new(){Margin=new Thickness(34,28,34,28)};
+ readonly ScrollViewer pageScroll;
  readonly TextBlock notice=new(){TextWrapping=TextWrapping.Wrap,FontSize=12,Margin=new Thickness(0,0,0,16)};
  readonly Dictionary<string,Button> nav=new();
  readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromSeconds(1)};
@@ -131,7 +140,7 @@ public sealed partial class LauncherWindow : Window
   var logo=new Border{Width=40,Height=40,CornerRadius=new CornerRadius(12),Background=AccentBrush,HorizontalAlignment=HorizontalAlignment.Left,Child=Label("V",23,BackgroundBrush)};((TextBlock)logo.Child).HorizontalAlignment=HorizontalAlignment.Center;((TextBlock)logo.Child).VerticalAlignment=VerticalAlignment.Center;navigation.Children.Add(logo);
   navigation.Children.Add(Label("Vibe\nWidgetsHub",22,TextBrush,new Thickness(0,15,0,34)));
   AddNav(navigation,"catalog","Каталог");AddNav(navigation,"installed","Мои виджеты");AddNav(navigation,"customize","Кастомизация");AddNav(navigation,"obs","Связь с OBS");AddNav(navigation,"settings","Настройки");
-  var scroller=new ScrollViewer{Content=content,Style=(Style)Resources[typeof(ScrollViewer)],VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(scroller,1);layout.Children.Add(scroller);
+  pageScroll=new ScrollViewer{Content=content,Style=(Style)Resources[typeof(ScrollViewer)],VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(pageScroll,1);layout.Children.Add(pageScroll);
   timer.Tick+=(_,_)=>{if(busy||updatePending)return;string snapshot=Snapshot();if(snapshot!=statusSnapshot)Render();};
   Loaded+=(_,_)=>{if(!preview)timer.Start();};Closed+=(_,_)=>{timer.Stop();uninstallProcess?.Dispose();DisposeLauncherTray();};
   Closing+=(_,e)=>{if(busy){e.Cancel=true;message="Подождите, пока завершится текущая операция.";notice.Text=message;}};
@@ -209,7 +218,7 @@ public sealed partial class LauncherWindow : Window
  void RenderSettings()
  {
   content.Children.Add(Label(BuildInfo.Version,13,MutedBrush,new Thickness(0,0,0,18)));
-  RenderUpdateSettings();RenderCloseSettings();RenderStartupSettings();RenderScreenSettings();
+  RenderUpdateSettings();RenderCloseSettings();RenderStartupSettings();RenderScreenSettings();RenderBackupSettings();
   var paths=new StackPanel();paths.Children.Add(Label("Папка лаунчера",17));paths.Children.Add(PathText(manager.Root));paths.Children.Add(Label("Папка виджетов",17,TextBrush,new Thickness(0,22,0,0)));paths.Children.Add(PathText(manager.WidgetsDirectory));paths.Children.Add(Label("Настройки виджетов сохраняются в подпапке Data. При удалении отдельного виджета они остаются для повторной установки.",12,MutedBrush,new Thickness(0,16,0,18)));
   var actions=new WrapPanel();var open=ActionButton("Открыть папку",()=>RunAction(()=>{Process.Start(new ProcessStartInfo(manager.Root){UseShellExecute=true});return Task.CompletedTask;},""));open.Margin=new Thickness(0,0,8,8);actions.Children.Add(open);
   var move=ActionButton("Перенести всё…",RequestRelocation);move.Margin=new Thickness(0,0,0,8);actions.Children.Add(move);paths.Children.Add(actions);content.Children.Add(Card(paths,new Thickness(25)));
@@ -221,7 +230,7 @@ public sealed partial class LauncherWindow : Window
   if(busy||updatePending)return;busy=true;message="Выполняем…";Render();
   try{await action();message=success;}
   catch(Exception ex){message=ex is OperationCanceledException?"Загрузка отменена.":ex is UnauthorizedAccessException?"Нет доступа к папке лаунчера. Выберите доступную папку при установке.":ex.Message;}
-  finally{busy=false;Render();if(pendingStop)RequestShutdown();}
+  finally{busy=false;Render();if(pendingStop)RequestShutdown();else ResumeWorkshopRequest();}
  }
  void ConfirmRemove(Widget widget)
  {

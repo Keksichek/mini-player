@@ -14,7 +14,7 @@ internal static class PresetWidgetUpgrade
  const string Marker="preset-format.json";
  static bool Current(string folder){
   string path=Path.Combine(folder,Marker);WidgetManager.RejectLinks(path);
-  try{if(!File.Exists(path)||new FileInfo(path).Length>4096)return false;using var doc=JsonDocument.Parse(File.ReadAllText(path));return doc.RootElement.TryGetProperty("Version",out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetInt32(out int version)&&version>=4;}catch(JsonException){return false;}
+  try{if(!File.Exists(path)||new FileInfo(path).Length>4096)return false;using var doc=JsonDocument.Parse(File.ReadAllText(path));return doc.RootElement.TryGetProperty("Version",out var v)&&v.ValueKind==JsonValueKind.Number&&v.TryGetInt32(out int version)&&version>=8;}catch(JsonException){return false;}
  }
  public static async Task EnsureAsync(WidgetManager manager,Widget widget){
   if(widget.Id!="mini-player"||!manager.IsInstalled(widget))return;

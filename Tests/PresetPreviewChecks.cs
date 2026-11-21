@@ -39,6 +39,13 @@ static class PresetPreviewChecks
    var frames=(IList)typeof(PresetSurface).GetField("frames",Hidden)!.GetValue(preview.Surface)!;
    BitmapSource At(int index)=>(BitmapSource)frames[index]!.GetType().GetField("Item1")!.GetValue(frames[index])!;
    Check(Pixels(At(0)).All(x=>x==0xFFFF0000),"GIF first full frame is composed correctly");
+   using(var still=new PresetSurface(root,firstFrameOnly:true)){
+    still.Configure(preset);
+    Check(still.MediaError.Length==0&&still.AnimationFrameCount==1&&!still.AnimationRunning,"A gallery thumbnail decodes just the first GIF frame");
+    var first=((IList)typeof(PresetSurface).GetField("frames",Hidden)!.GetValue(still)!)[0]!;
+    var bitmap=(BitmapSource)first.GetType().GetField("Item1")!.GetValue(first)!;
+    Check(Pixels(bitmap).SequenceEqual(Pixels(At(0))),"The gallery uses exactly the first composite GIF frame shown on the player");
+   }
    Check(Pixels(At(1)).SequenceEqual(new uint[]{0xFF0000FF,0xFFFF0000,0xFFFF0000,0xFFFF0000}),"GIF partial frames retain the previous background");
    Check(Pixels(At(2)).SequenceEqual(new uint[]{0,0xFFFF0000,0xFFFF0000,0xFF00FF00}),"GIF disposal two clears only the previous frame region");
    Check(Pixels(At(3)).SequenceEqual(new uint[]{0,0xFF0000FF,0xFFFF0000,0xFFFF0000}),"GIF disposal three restores the previous canvas");
@@ -91,6 +98,23 @@ static class PresetPreviewChecks
    preview.Surface.SetButtonIcon("play","off");
    using(var live=new PresetSurface(root)){live.Configure(preset);Check(live.Width==preview.Surface.Width&&live.Height==preview.Surface.Height&&live.Elements.All(x=>x.Value.Width==preview.Surface.Elements[x.Key].Width&&x.Value.Height==preview.Surface.Elements[x.Key].Height),"Live and preview surfaces use exactly the same dimensions");
     var rendered=new List<byte[]>();foreach(var surface in new[]{live,preview.Surface}){surface.Measure(new Size(surface.Width,surface.Height));surface.Arrange(new Rect(0,0,surface.Width,surface.Height));surface.UpdateLayout();var bitmap=new RenderTargetBitmap((int)surface.Width,(int)surface.Height,96,96,PixelFormats.Pbgra32);bitmap.Render(surface);var bytes=new byte[(int)surface.Width*(int)surface.Height*4];bitmap.CopyPixels(bytes,(int)surface.Width*4,0);rendered.Add(bytes);}Check(rendered[0].SequenceEqual(rendered[1]),"Shared preview and live renderer produce identical pixels with the same data");}
+   var overlap=new WidgetPreset{Shape="rectangle"};overlap.Normalize();
+   foreach(var element in overlap.Elements.Values){element.X=40;element.Y=30;element.Visible=false;}
+   overlap.Elements["title"].Visible=overlap.Elements["cover"].Visible=true;
+   var hit=new Point(46,36);
+   preview.Update(overlap);
+   Check(preview.HitElement(hit)=="title","Selecting overlapping elements respects their historical z-order");
+   overlap.MoveLayer("cover",1);preview.Update(overlap);
+   Check(preview.HitElement(hit)=="cover","Preview selection targets the visible element raised above the title");
+   using(var live=new PresetSurface(root)){
+    live.Configure(overlap);
+    foreach(var surface in new[]{preview.Surface,live}){
+     int front=surface.Children.IndexOf(surface.Elements["cover"]),back=surface.Children.IndexOf(surface.Elements["title"]);
+     Check(front>back&&back>0&&front<surface.Children.Count-1,"Preview and live stack keep the ordered elements between the background and the frame");
+    }
+   }
+   overlap.Elements["cover"].Visible=false;preview.Update(overlap);
+   Check(preview.HitElement(hit)=="title","Hidden cover does not intercept preview selection");
    preview.Dispose();Check(!preview.AnimationRunning&&preview.AnimationFrameCount==0,"Disposal releases decoded animation frames");
    Console.WriteLine("TOTAL "+count+" PASS");return 0;
   }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}finally{window?.Close();app.Shutdown();}

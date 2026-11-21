@@ -59,6 +59,7 @@ public sealed partial class Player
   empty.SetBinding(VisibilityProperty,new Binding("Items.IsEmpty"){Source=sources,Converter=new BooleanToVisibilityConverter()});
   media.Children.Add(empty);
   media.Children.Add(new TextBlock{Text="Чтобы быстро сменить источник, нажмите на название трека в плеере.",FontSize=12,Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
+  if(CustomPresetRoot!=null)AddSourcePresetPicker(media);
 
   volumeSlider.ClearValue(Control.TemplateProperty);
   var mixer=Section("Громкость");
@@ -71,7 +72,9 @@ public sealed partial class Player
   auto.Foreground=ink;auto.FontSize=13;behavior.Children.Add(auto);
   behavior.Children.Add(new TextBlock{Text="Плеер появляется, когда выбранное приложение свёрнуто, и скрывается, когда его окно открыто. Источник выбирается выше.",FontSize=12,Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
   AddPausePreference(behavior);
+  AddAnchorSettings(Section("Положение на экране"));
   var hotkeys=Section("Горячие клавиши");hotkeys.Children.Add(BuildHotkeySettings());
+  hotkeys.Children.Add(new TextBlock{Text=PassThroughHelp,FontSize=12,Foreground=muted,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)});
   var uninstall=PreferencesButton(new TextBlock{Text=LaunchContext.LauncherRoot==null?"Удалить приложение полностью":"Удалить виджет через лаунчер",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center});
   uninstall.Foreground=PreferencesDanger;uninstall.Background=PreferencesBrush("#2B202A");uninstall.BorderBrush=PreferencesBrush("#57313B");
   uninstall.FontSize=13;uninstall.Margin=new Thickness(2,3,8,8);uninstall.Padding=new Thickness(12,10,12,10);

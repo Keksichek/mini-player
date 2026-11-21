@@ -29,6 +29,46 @@ static class ScreenBoundsChecks
  static NativeRect Bounds(IntPtr handle){if(!GetWindowRect(handle,out var bounds))throw new Exception("GetWindowRect failed");return bounds;}
  static bool Contains(System.Drawing.Rectangle work,NativeRect bounds)=>bounds.Left>=work.Left&&bounds.Top>=work.Top&&bounds.Right<=work.Right&&bounds.Bottom<=work.Bottom;
  static bool RecoverVisible=>(bool)type.GetProperty("RecoveryIsVisible",Instance)!.GetValue(player)!;
+ static void CheckAnchors(string data,IntPtr handle){
+  var slot=type.GetNestedType("AnchorPoint",BindingFlags.NonPublic)!;
+  Point Position(string name,Rect work,Size size,double dpi)=>(Point)type.GetMethod("AnchorPosition",Static)!.Invoke(null,new object[]{Enum.Parse(slot,name),work,size,16d,dpi})!;
+  var leftScreen=new Rect(-1920,-300,1920,1040);
+  Check(Position("BottomRight",leftScreen,new Size(640,240),144)==new Point(-664,476),"Corner placement uses target DPI and negative monitor coordinates");
+  Check(Position("Left",leftScreen,new Size(240,140),96)==new Point(-1904,150)&&Position("Top",leftScreen,new Size(240,140),96)==new Point(-1080,-284),"Edge anchors center along the other axis");
+  Check(Position("BottomRight",new Rect(32,44,275,160),new Size(300,180),96)==new Point(32,44),"Oversized anchored widget stays accessible");
+  Check(Field("anchor")!.ToString()=="Free","Settings created before anchors keep free placement");
+  var settings=new StackPanel();Call("AddAnchorSettings",settings);
+  var position=settings.Children.OfType<ComboBox>().Single();
+  var details=settings.Children.OfType<StackPanel>().Single();
+  var monitor=details.Children.OfType<ComboBox>().Single();var gap=details.Children.OfType<Slider>().Single();
+  position.SelectedItem="Справа внизу";gap.Value=23;Pump();
+  string preferred=(string)monitor.SelectedValue;
+  Check(preferred.Length>0&&preferred==(string)Field("anchorMonitor")!&&details.Visibility==Visibility.Visible,"Choosing an anchor remembers the current monitor and reveals its controls");
+  var area=Screen.FromHandle(handle).WorkingArea;
+  var before=Bounds(handle);
+  string presetPath=Path.Combine(Path.GetDirectoryName(data)!,"Customization","mini-player","active.json");
+  File.WriteAllText(presetPath,"{\"Width\":520,\"Height\":220,\"Shape\":\"rounded\"}");Call("RefreshCustomPreset",true);Pump();
+  var grown=Bounds(handle);
+  Check(grown.Width!=before.Width&&grown.Height!=before.Height&&grown.Right==before.Right&&grown.Bottom==before.Bottom,"Changing preset size grows inward from the same physical corner");
+  int margin=(int)Math.Round(23*VisualTreeHelper.GetDpi((Window)player).DpiScaleX);
+  Check(grown.Right==area.Right-margin&&grown.Bottom==area.Bottom-margin,"Real window respects the chosen taskbar work area and scaled margin");
+  Call("Save");Set("anchor",Enum.Parse(slot,"Free"));Set("anchorGap",0);Set("anchorMonitor","");
+  Call("LoadSettings");Pump();
+  Check(Field("anchor")!.ToString()=="BottomRight"&&(int)Field("anchorGap")! ==23&&(string)Field("anchorMonitor")! ==preferred,"Placement, preferred monitor and offset survive reloading settings");
+  var displays=(Array)Call("AnchorDisplays")!;
+  var values=displays.Cast<object>().ToArray();var monitorType=values[0].GetType();
+  string Id(object d)=>(string)monitorType.GetProperty("Id")!.GetValue(d)!;
+  var physical=(Screen)monitorType.GetProperty("Screen")!.GetValue(values[0])!;
+  var reconnected=Activator.CreateInstance(monitorType,"fixture:disconnected","Fixture screen",physical)!;
+  Set("anchorMonitor","fixture:disconnected");
+  Call("UpdateRecoveryArrow");Pump();
+  var primary=Screen.PrimaryScreen!.WorkingArea;
+  Check(Contains(primary,Bounds(handle))&&(string)Field("anchorMonitor")! =="fixture:disconnected","Disconnected monitor falls back to primary while retaining its identity");
+  Array joined=Array.CreateInstance(monitorType,displays.Length+1);Array.Copy(displays,joined,displays.Length);joined.SetValue(reconnected,displays.Length);
+  object restored=type.GetMethod("ResolveAnchorDisplay",Static)!.Invoke(null,new object[]{joined,Field("anchorMonitor")!})!;
+  Check(Id(restored)=="fixture:disconnected","Preferred monitor is selected again as soon as it reappears");
+  Call("ClearAnchorForDrag");Check(Field("anchor")!.ToString()=="Free"&&details.Visibility==Visibility.Collapsed,"Dragging releases anchoring and updates open settings");
+ }
  static void Snapshot(Window window,string path,Rect visible){
   var surface=(FrameworkElement)window.Content;surface.UpdateLayout();var image=new RenderTargetBitmap((int)Math.Ceiling(window.Width),(int)Math.Ceiling(window.Height),96,96,PixelFormats.Pbgra32);image.Render(surface);
   var native=Bounds(new WindowInteropHelper(window).Handle);
@@ -169,6 +209,7 @@ static class ScreenBoundsChecks
    var circleArrow=(Button)Field("recoveryButton")!;
    var buttonBounds=new Rect(Canvas.GetLeft(circleArrow),Canvas.GetTop(circleArrow),circleArrow.Width,circleArrow.Height);
    Check(circleFace.Clip.FillContains(new RectangleGeometry(buttonBounds)),"Entire embedded recovery button fits the shape");
+   CheckAnchors(data,handle);
    Console.WriteLine("TOTAL "+checks+" PASS");return 0;
   }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
   finally{if(player!=null){try{Set("closing",true);((Window)player).Close();}catch{}}application?.Shutdown();}

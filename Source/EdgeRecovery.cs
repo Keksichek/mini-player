@@ -35,10 +35,16 @@ public sealed partial class Player
  static Rect ContainInWorkArea(Rect window,Rect work)=>new(Math.Clamp(window.Left,work.Left,Math.Max(work.Left,work.Right-window.Width)),Math.Clamp(window.Top,work.Top,Math.Max(work.Top,work.Bottom-window.Height)),window.Width,window.Height);
  void InitializeScreenBoundsGuard(){HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(GuardScreenBounds);}
  IntPtr GuardScreenBounds(IntPtr window,int message,IntPtr wParam,IntPtr lParam,ref bool handled){
-  if(message!=0x0046||HubAllowsOffscreen||closing||!IsLoaded||lParam==IntPtr.Zero)return IntPtr.Zero;
+  if(message is 0x007e or 0x001a or 0x02e0)RefreshAnchorOnDisplayChange(); // display, working area or DPI
+  if(message!=0x0046||closing||!IsLoaded||lParam==IntPtr.Zero||HubAllowsOffscreen&&anchor==AnchorPoint.Free)return IntPtr.Zero;
   if(!GetWindowRect(window,out var current))return IntPtr.Zero;
   var position=Marshal.PtrToStructure<WindowPosition>(lParam);
   var requested=new Rect((position.Flags&2)!=0?current.Left:position.X,(position.Flags&2)!=0?current.Top:position.Y,(position.Flags&1)!=0?current.Bounds.Width:Math.Max(1,position.Width),(position.Flags&1)!=0?current.Bounds.Height:Math.Max(1,position.Height));
+  if(GetAnchorPosition(window,requested.Size) is Point target){
+   if(target!=requested.TopLeft){position.X=(int)target.X;position.Y=(int)target.Y;position.Flags&=~2u;Marshal.StructureToPtr(position,lParam,false);}
+   return IntPtr.Zero;
+  }
+  if(HubAllowsOffscreen)return IntPtr.Zero;
   var area=Screen.FromRectangle(new System.Drawing.Rectangle((int)requested.X,(int)requested.Y,(int)requested.Width,(int)requested.Height)).WorkingArea;
   var contained=ContainInWorkArea(requested,new Rect(area.X,area.Y,area.Width,area.Height));
   if(contained.TopLeft!=requested.TopLeft){position.X=(int)contained.X;position.Y=(int)contained.Y;position.Flags&=~2u;Marshal.StructureToPtr(position,lParam,false);}
@@ -147,10 +153,16 @@ public sealed partial class Player
 
  void UpdateRecoveryArrow(){
   if(closing)return;
+  UpdateMouseRestoreWindow();
   if(!IsLoaded||!IsVisible||WindowState!=WindowState.Normal){CancelRecoveryAnimation();HideRecoveryControls();return;}
   if(recovering){HideRecoveryControls();return;}
   var window=new WindowInteropHelper(this).Handle;
   if(!GetWindowRect(window,out var player))return;
+  if(GetAnchorPosition(window,player.Bounds.Size) is Point target){
+   HideRecoveryControls();
+   if(player.Left!=target.X||player.Top!=target.Y)SetWindowPos(window,IntPtr.Zero,(int)target.X,(int)target.Y,0,0,KeepSizeAndActivation);
+   return;
+  }
   if(!HubAllowsOffscreen){
    CancelRecoveryAnimation();HideRecoveryControls();var boundsArea=Screen.FromRectangle(player.DrawingBounds).WorkingArea;
    var contained=ContainInWorkArea(player.Bounds,new Rect(boundsArea.X,boundsArea.Y,boundsArea.Width,boundsArea.Height));

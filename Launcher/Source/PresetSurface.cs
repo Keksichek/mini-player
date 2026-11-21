@@ -15,6 +15,7 @@ namespace WidgetLauncher;
 public sealed class PresetSurface : Canvas,IDisposable
 {
  readonly string root;
+ readonly bool firstFrameOnly;
  readonly ImageBrush mediaBrush=new();
  readonly DispatcherTimer animation=new(DispatcherPriority.Background);
  readonly List<(BitmapSource Image,int Delay)> frames=new();
@@ -23,12 +24,15 @@ public sealed class PresetSurface : Canvas,IDisposable
  bool disposed;
  WidgetPreset preset=new();
  public Dictionary<string,FrameworkElement> Elements {get;}=new();
+ public IReadOnlyList<string> LayerOrder=>preset.LayerOrder;
  public Geometry ShapeGeometry {get;private set;}=Geometry.Empty;
  public string MediaError {get;private set;}="";
  public int AnimationFrameCount=>frames.Count;
  public int AnimationFrameIndex=>frameIndex;
  public bool AnimationRunning=>animation.IsEnabled;
- public PresetSurface(string hubRoot){
+ public PresetSurface(string hubRoot):this(hubRoot,false){}
+ internal PresetSurface(string hubRoot,bool firstFrameOnly){
+  this.firstFrameOnly=firstFrameOnly;
   root=Path.GetFullPath(hubRoot);ClipToBounds=true;
   animation.Tick+=(_,_)=>AdvanceAnimation();Loaded+=(_,_)=>StartAnimation();Unloaded+=(_,_)=>animation.Stop();
   IsVisibleChanged+=(_,_)=>{if(IsVisible)StartAnimation();else animation.Stop();};
@@ -94,9 +98,10 @@ public sealed class PresetSurface : Canvas,IDisposable
    Put(id,b);SetButtonIcon(id,id=="lock"?"unlocked":id=="repeat"?"none":"off");
   }
   Put("progress",MakeSlider(p.EffectiveStyle("progress"),240,95));Put("volume",MakeSlider(p.EffectiveStyle("volume"),100,50));
+  foreach(string id in p.LayerOrder)Children.Add(Elements[id]);
   Children.Add(new System.Windows.Shapes.Path{Data=ShapeGeometry,Stroke=Brush(p.BorderColor),StrokeThickness=p.BorderWidth*2,Opacity=p.Opacity,IsHitTestVisible=false});
  }
- void Put(string id,FrameworkElement element){var item=preset.Elements[id];element.Width=item.Width;element.Height=item.Height;element.Opacity=preset.EffectiveStyle(id).Opacity;SetLeft(element,item.X);SetTop(element,item.Y);element.Visibility=preset.IsElementVisible(id)?Visibility.Visible:Visibility.Collapsed;element.ClipToBounds=true;System.Windows.Automation.AutomationProperties.SetName(element,Label(id));Elements[id]=element;Children.Add(element);}
+ void Put(string id,FrameworkElement element){var item=preset.Elements[id];element.Width=item.Width;element.Height=item.Height;element.Opacity=preset.EffectiveStyle(id).Opacity;SetLeft(element,item.X);SetTop(element,item.Y);element.Visibility=preset.IsElementVisible(id)?Visibility.Visible:Visibility.Collapsed;element.ClipToBounds=true;System.Windows.Automation.AutomationProperties.SetName(element,Label(id));Elements[id]=element;}
  public static string Label(string id)=>id switch{"cover"=>"Обложка","title"=>"Название трека","artist"=>"Исполнитель","previous"=>"Предыдущий трек","play"=>"Пауза / воспроизведение","next"=>"Следующий трек","repeat"=>"Повтор","pin"=>"Поверх окон","lock"=>"Блокировка перемещения","clickthrough"=>"Клики насквозь","hide"=>"Скрыть","menu"=>"Меню плеера","progress"=>"Шкала трека","time"=>"Время трека","volume"=>"Громкость",_=>id};
  static Slider MakeSlider(PresetElementStyle p,double max,double value){
   var slider=new Slider{Minimum=0,Maximum=max,Value=value,IsMoveToPointEnabled=true,SmallChange=1,LargeChange=10,MinHeight=0,MinWidth=0};slider.Resources["PresetAccent"]=Brush(p.AccentColor);slider.Resources["PresetText"]=Brush(p.TextColor);
@@ -156,7 +161,8 @@ public sealed class PresetSurface : Canvas,IDisposable
   if(file.Length==0)return;
   try{
    if(new FileInfo(file).Length>PresetStore.MaximumMediaBytes)throw new IOException("Файл больше 20 МБ.");
-   using var stream=File.OpenRead(file);var decoder=BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad);
+   var cache=firstFrameOnly&&Path.GetExtension(file)==".gif"?BitmapCacheOption.OnDemand:BitmapCacheOption.OnLoad;
+   using var stream=File.OpenRead(file);var decoder=BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,cache);
    var size=PresetStore.ValidateMediaFrames(decoder,Path.GetExtension(file).ToLowerInvariant());
    if(decoder is GifBitmapDecoder gif)DecodeGif(gif,size.Width,size.Height);
    else{var first=decoder.Frames[0];first.Freeze();frames.Add((first,100));}
@@ -176,10 +182,11 @@ public sealed class PresetSurface : Canvas,IDisposable
   foreach(var frame in decoder.Frames){
    var fm=frame.Metadata as BitmapMetadata;int left=Metadata(fm,"/imgdesc/Left",0),top=Metadata(fm,"/imgdesc/Top",0);
    if(left<0||top<0||left+frame.PixelWidth>width||top+frame.PixelHeight>height)throw new IOException("Некорректная область кадра GIF.");
-   int disposal=Metadata(fm,"/grctlext/Disposal",0);byte[]? previous=disposal==3?(byte[])canvas.Clone():null;
+   int disposal=Metadata(fm,"/grctlext/Disposal",0);byte[]? previous=disposal==3&&!firstFrameOnly?(byte[])canvas.Clone():null;
    var converted=new FormatConvertedBitmap(frame,PixelFormats.Bgra32,null,0);byte[] pixels=new byte[checked(frame.PixelWidth*frame.PixelHeight*4)];converted.CopyPixels(pixels,frame.PixelWidth*4,0);
    for(int y=0;y<frame.PixelHeight;y++)for(int x=0;x<frame.PixelWidth;x++){int from=(y*frame.PixelWidth+x)*4,to=((y+top)*width+x+left)*4;byte alpha=pixels[from+3];if(alpha==0)continue;for(int c=0;c<3;c++)canvas[to+c]=(byte)((pixels[from+c]*alpha+canvas[to+c]*(255-alpha))/255);canvas[to+3]=(byte)(alpha+canvas[to+3]*(255-alpha)/255);}
    var image=BitmapSource.Create(width,height,96,96,PixelFormats.Bgra32,null,canvas,width*4);image.Freeze();frames.Add((image,Math.Clamp(Metadata(fm,"/grctlext/Delay",10)*10,20,10000)));
+   if(firstFrameOnly)break;
    if(disposal==2)Clear(left,top,frame.PixelWidth,frame.PixelHeight,Metadata(fm,"/grctlext/TransparencyFlag",1)!=0?transparentPixel:background);
    else if(disposal==3&&previous!=null)canvas=previous;
   }

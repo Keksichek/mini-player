@@ -1,4 +1,4 @@
-param([string]$OutputDirectory)
+param([string]$OutputDirectory,[switch]$CheckLiveEndpoint,[string]$ClassicRendererDirectory)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot -Parent
 if(!$OutputDirectory){$OutputDirectory=Join-Path $repo ('.build\LauncherCustomization-'+[Guid]::NewGuid().ToString('N').Substring(0,8))}
@@ -28,6 +28,15 @@ $dll=Join-Path $output 'LauncherCustomizationChecks.dll'
 $stream=[IO.File]::Create($dll)
 try{$result=$compilation.Emit($stream,$null,$null,$null,$resources);if(!$result.Success){$result.Diagnostics|ForEach-Object ToString;throw 'Launcher customization checks compilation failed'}}finally{$stream.Dispose()}
 [IO.File]::WriteAllText((Join-Path $output 'LauncherCustomizationChecks.runtimeconfig.json'),'{"runtimeOptions":{"tfm":"net10.0-windows","framework":{"name":"Microsoft.WindowsDesktop.App","version":"10.0.0"}}}')
-& dotnet $dll $fixture (Join-Path $output 'Previews')
+$checkArgs=@($dll,$fixture,(Join-Path $output 'Previews'))
+if($CheckLiveEndpoint){$checkArgs+='--check-live-endpoint'}
+if($ClassicRendererDirectory){
+ $app=New-Item -ItemType Directory -Force -Path (Join-Path $fixture 'Widgets\mini-player\App')
+ Get-ChildItem -LiteralPath $ClassicRendererDirectory | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $app.FullName -Recurse -Force}
+ Copy-Item -LiteralPath (Join-Path $repo '.build\Payload\Runtime') -Destination $fixture -Recurse
+ [IO.File]::WriteAllText((Join-Path $fixture 'launcher-install.json'),'{"ProductId":"MiniPlayer.WidgetLauncher"}')
+ $checkArgs+='--check-classic'
+}
+& dotnet @checkArgs
 if($LASTEXITCODE -ne 0){throw 'Launcher customization checks failed'}
 Write-Host ('Customization previews: '+(Join-Path $output 'Previews'))

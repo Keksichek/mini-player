@@ -18,10 +18,15 @@ public sealed partial class LauncherWindow
  TextBlock? presetStatus;
  readonly System.Windows.Threading.DispatcherTimer presetDraftTimer=new(){Interval=TimeSpan.FromMilliseconds(650)};
  bool presetDraftTimerConfigured,presetDraftDirty;
- readonly Stack<WidgetPreset> presetHistory=new();
+ Grid? presetEditorGrid;
  PresetStore Presets=>new(manager.Root,customizationWidget);
  static readonly string[] PresetTabs={"Форма","Цвета","Текст","Детали","Фон"};
  void ReleasePresetPreview(){
+  EndPresetComparison();
+  StopTrackPreview();trackPreviewHint=null;
+  if(page!="customize"||customizationStep!="editor"){previewTrack=null;previewArtwork=null;}
+  undoPresetButton=redoPresetButton=previousRandomButton=null;presetEditorGrid=null;
+  if(page!="customize"||customizationStep!="editor")presetColorPicker?.Close();
   presetPreview?.Dispose();presetPreview=null;presetStatus=null;presetDetailPanel=null;presetTabButtons=null;syncGeometryFields.Clear();
   if(page!="customize"||customizationStep!="editor")largePresetWindow?.Close();
  }
@@ -30,11 +35,12 @@ public sealed partial class LauncherWindow
  Button PresetButton(string title,Action action,bool accent=false){var b=ActionButton(title,action,accent);AutomationProperties.SetName(b,title);return b;}
  void RenderCustomization(){
   ConfigurePresetControls();
-  if(!presetDraftTimerConfigured){presetDraftTimerConfigured=true;presetDraftTimer.Tick+=(_,_)=>SavePresetDraft();Closed+=(_,_)=>{SavePresetDraft();largePresetWindow?.Close();};}
+  if(!presetDraftTimerConfigured){presetDraftTimerConfigured=true;PreviewKeyDown+=OnPresetHistoryKey;presetDraftTimer.Tick+=(_,_)=>SavePresetDraft();Closed+=(_,_)=>{SavePresetDraft();largePresetWindow?.Close();};}
   if(customizationStep=="home"){RenderCustomizationHome();return;}
   var back=PresetButton("← Назад",()=>PresetNavigate(customizationStep=="widget"?"home":customizationStep=="gallery"?"widget":customizationMode is "presets" or "saved"?"gallery":"widget"));back.HorizontalAlignment=HorizontalAlignment.Left;back.Margin=new Thickness(0,0,0,18);content.Children.Add(back);
   if(customizationStep=="widget"){RenderPresetWidgetPicker();return;}
   if(customizationStep=="gallery"){RenderPresetGallery();return;}
+  if(workshopSwitchPending)RenderWorkshopSwitch();
   RenderPresetEditor();
  }
  void RenderCustomizationHome(){
@@ -57,11 +63,12 @@ public sealed partial class LauncherWindow
     PresetTry(()=>{
      SavePresetDraft();
      presetDraft??=Presets.LoadDraft();
-     presetHistory.Clear();
+     ResetPresetHistory();
      if(customizationMode=="random"){
-      if(presetDraft!=null)presetHistory.Push(presetDraft.Copy());
-      presetDraft=RandomPreset();
+      if(presetDraft!=null){presetDraft.Normalize();RecordPresetEdit();}
+      presetDraft=RandomPreset();RecordPresetEdit(true);
      }else{
+      workshopRecoveredDraft=presetDraft!=null&&!DraftAlreadySaved(Presets,presetDraft);
       presetDraft=presetDraft?.Copy()??PresetThemes.Create("Лаванда");
       presetDraft.Id="";
      }
@@ -83,18 +90,12 @@ public sealed partial class LauncherWindow
    panel.Children.Add(Label(theme,15));var button=PresetButton("Пресет: "+theme,()=>OpenPreset(PresetThemes.Create(theme)));button.Content=panel;button.Background=PanelBrush;button.Margin=new Thickness(0,0,12,12);button.Padding=new Thickness(14);grid.Children.Add(button);
   }
  }
- void RenderSavedPresetGallery(){
-  content.Children.Add(Label("Мини-плеер · созданные пресеты",20,TextBrush,new Thickness(0,0,0,14)));
-  AddPresetImportActions(content);
-  try{var saved=Presets.List();if(!saved.Any())content.Children.Add(Label("Сохрани первый вариант в конфигураторе — он появится здесь.",12,MutedBrush));foreach(var preset in saved){var button=PresetButton("Мой пресет: "+preset.Name,()=>OpenPreset(preset));button.HorizontalContentAlignment=HorizontalAlignment.Stretch;button.HorizontalAlignment=HorizontalAlignment.Stretch;button.Margin=new Thickness(0,0,0,8);content.Children.Add(button);}}
-  catch(Exception ex){content.Children.Add(Label("Не удалось прочитать пресеты: "+ex.Message,12,ColorBrush("#F0A2AC")));}
- }
- void OpenPreset(WidgetPreset preset){SavePresetDraft();presetDraft=preset.Copy();presetHistory.Clear();PresetNavigate("editor");}
- void QueuePresetDraft(){presetDraftDirty=true;presetDraftTimer.Stop();presetDraftTimer.Start();}
+ void OpenPreset(WidgetPreset preset){SavePresetDraft();presetDraft=preset.Copy();ResetPresetHistory();PresetNavigate("editor");}
+ void QueuePresetDraft(){RecordPresetEdit();presetDraftDirty=true;presetDraftTimer.Stop();presetDraftTimer.Start();}
  void SavePresetDraft(){presetDraftTimer.Stop();if(!presetDraftDirty||presetDraft==null)return;try{Presets.SaveDraft(presetDraft);presetDraftDirty=false;}catch(Exception ex){if(presetStatus!=null)presetStatus.Text="Черновик не сохранён: "+ex.Message;}}
  string[] PresetFonts()=>new[]{"Onest"}.Concat(Fonts.SystemFontFamilies.Select(x=>x.Source)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x).ToArray();
  WidgetPreset RandomPreset()=>PresetRandomizer.Create(Random.Shared,PresetFonts(),Presets.MediaFiles(),presetDraft);
- void RandomizePreset(){PresetTry(()=>{if(presetDraft!=null)presetHistory.Push(presetDraft.Copy());presetDraft=RandomPreset();Presets.SaveDraft(presetDraft);PresetNavigate("editor");});}
+ void RandomizePreset(){PresetTry(()=>{FinishPresetGesture();presetDraft=RandomPreset();RecordPresetEdit(true);Presets.SaveDraft(presetDraft);PresetNavigate("editor");});}
  void RefreshPresetPreview(){
   if(presetDraft==null)return;
   try{presetDraft.Normalize();presetPreview?.Update(presetDraft);RefreshLargePresetPreview();QueuePresetDraft();if(presetStatus!=null)presetStatus.Text="Изменения в превью · нажми «Применить» для плеера";}
@@ -103,29 +104,32 @@ public sealed partial class LauncherWindow
  void RenderPresetEditor(){
   presetDraft??=PresetThemes.Create("Лаванда");
   presetDraft.Normalize();
+  recordedPreset??=CapturePreset();
   var top=new DockPanel{Margin=new Thickness(0,0,0,14)};var badge=Label("МИНИ-ПЛЕЕР",10,AccentBrush);DockPanel.SetDock(badge,Dock.Right);top.Children.Add(badge);top.Children.Add(Label(customizationMode=="random"?"Случайный характер":"Мастерская пресета",22));content.Children.Add(top);
-  var editor=new Grid{IsEnabled=!busy&&!updatePending};editor.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(Width>=1000?370:300)});editor.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(18)});editor.ColumnDefinitions.Add(new ColumnDefinition());content.Children.Add(editor);
+  var editor=presetEditorGrid=new Grid{IsEnabled=!busy&&!updatePending&&presetColorPicker==null};editor.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(Width>=1000?370:300)});editor.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(18)});editor.ColumnDefinitions.Add(new ColumnDefinition());content.Children.Add(editor);
   var left=new StackPanel();editor.Children.Add(left);
   var previewBox=new StackPanel();previewBox.Children.Add(Label("ПРЕВЬЮ",10,MutedBrush,new Thickness(0,0,0,14)));
+  AddTrackPreviewControls(previewBox);
   presetPreview=new PresetPreview(manager.Root){Height=290,Zoom=presetPreviewZoom,HorizontalAlignment=HorizontalAlignment.Stretch};presetPreview.Update(presetDraft);AttachPresetDragging(presetPreview);previewBox.Children.Add(presetPreview);
+  var compare=ComparisonButton();compare.Margin=new Thickness(0,8,0,0);previewBox.Children.Add(compare);
   presetScaleLabel=Label("",11,MutedBrush,new Thickness(0,12,0,0));previewBox.Children.Add(presetScaleLabel);AddPresetZoomControls(previewBox);RefreshLargePresetPreview();
-  var expand=PresetButton("Превью 1:1",ShowLargePresetPreview);expand.Margin=new Thickness(0,12,0,0);previewBox.Children.Add(expand);left.Children.Add(Card(previewBox,new Thickness(16)));
+  var expand=PresetButton("Превью 1:1",ShowLargePresetPreview);expand.Margin=new Thickness(0,12,0,0);previewBox.Children.Add(expand);AddHistoryButtons(previewBox);left.Children.Add(Card(previewBox,new Thickness(16)));
   var name=PresetTextBox("Название пресета",presetDraft.Name);name.MaxLength=80;name.TextChanged+=(_,_)=>{presetDraft.Name=name.Text;QueuePresetDraft();};left.Children.Add(Label("Название пресета",12,MutedBrush));name.Margin=new Thickness(0,8,0,10);left.Children.Add(name);
   var save=PresetButton("Сохранить пресет",()=>PresetTry(()=>{if(string.IsNullOrWhiteSpace(presetDraft.Name))throw new IOException("Укажи название пресета.");Presets.Save(presetDraft);Presets.SaveDraft(presetDraft);if(presetStatus!=null)presetStatus.Text="Сохранено в «Созданные пресеты»";}),true);left.Children.Add(save);
   var apply=PresetButton("Применить",()=>RunAction(ApplyCurrentPresetAsync,"Пресет применён к мини-плееру и сохранён в созданных пресетах."),true);apply.Margin=new Thickness(0,8,0,0);left.Children.Add(apply);
   AddPresetExportActions(left);
   var random=PresetButton("Рандомизировать ещё",RandomizePreset);random.Margin=new Thickness(0,8,0,0);left.Children.Add(random);
-  var undo=PresetButton("Вернуть предыдущий",()=>{if(presetHistory.Count>0){presetDraft=presetHistory.Pop();QueuePresetDraft();Render();}});undo.Margin=new Thickness(0,8,0,0);undo.IsEnabled=presetHistory.Count>0;left.Children.Add(undo);
+  previousRandomButton=PresetButton("Вернуть предыдущий",()=>StepPresetHistory(false,true));previousRandomButton.Margin=new Thickness(0,8,0,0);RefreshHistoryButtons();left.Children.Add(previousRandomButton);
   presetStatus=Label("",11,AccentBrush,new Thickness(0,12,0,0));left.Children.Add(presetStatus);
   var right=new StackPanel();Grid.SetColumn(right,2);editor.Children.Add(right);
   var tabs=new WrapPanel{Margin=new Thickness(0,0,0,12)};presetTabButtons=tabs;right.Children.Add(tabs);
   foreach(string tab in PresetTabs){var b=PresetButton(tab,()=>{presetTab=tab;Render();});b.Padding=new Thickness(11,8,11,8);b.Margin=new Thickness(0,0,5,5);b.Background=presetTab==tab?ColorBrush("#30283F"):PanelBrush;b.Foreground=presetTab==tab?AccentBrush:MutedBrush;tabs.Children.Add(b);}
   var fields=new StackPanel();presetDetailPanel=fields;right.Children.Add(Card(fields,new Thickness(18)));RenderPresetFields(fields);
  }
- TextBox PresetTextBox(string name,string value){var text=new TextBox{Text=value,Foreground=TextBrush,Background=ColorBrush("#232530"),BorderBrush=ColorBrush("#3B3D50"),Padding=new Thickness(10,8,10,8),Template=(ControlTemplate)Resources["PresetTextBoxTemplate"],FontSize=12,MinWidth=0,MinHeight=38,VerticalContentAlignment=VerticalAlignment.Center};AutomationProperties.SetName(text,name);return text;}
+ TextBox PresetTextBox(string name,string value){var text=new TextBox{Text=value,Foreground=TextBrush,Background=ColorBrush("#232530"),BorderBrush=ColorBrush("#3B3D50"),Padding=new Thickness(10,8,10,8),Template=(ControlTemplate)Resources["PresetTextBoxTemplate"],FontSize=12,MinWidth=0,MinHeight=38,VerticalContentAlignment=VerticalAlignment.Center};AutomationProperties.SetName(text,name);GroupTextHistory(text);return text;}
  void PresetSlider(Panel panel,string label,double min,double max,double step,double value,Action<double> write,string unit=" px",Func<double>? actual=null){
   var line=new DockPanel{Margin=new Thickness(0,12,0,3)};var val=Label("",11,AccentBrush);DockPanel.SetDock(val,Dock.Right);line.Children.Add(val);line.Children.Add(Label(label,12));panel.Children.Add(line);
-  var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true,Value=value,Height=26};AutomationProperties.SetName(slider,label);panel.Children.Add(slider);
+  var slider=new Slider{Minimum=min,Maximum=max,TickFrequency=step,IsSnapToTickEnabled=true,Value=value,Height=26};AutomationProperties.SetName(slider,label);GroupSliderHistory(slider);panel.Children.Add(slider);
   bool syncing=false;void Caption()=>val.Text=unit=="%"?$"{slider.Value*100:0}%":$"{slider.Value:0.##}{unit}";Caption();slider.ValueChanged+=(_,_)=>{if(syncing)return;double requested=slider.Value;write(requested);bool limited=actual!=null&&Math.Abs(actual()-requested)>.01;if(actual!=null){syncing=true;slider.Value=actual();syncing=false;}Caption();RefreshPresetPreview();if(limited&&presetStatus!=null)presetStatus.Text="Размер ограничен закреплёнными элементами.";};
  }
  void PresetChoice(Panel panel,string label,string[] values,string[] names,string value,Action<string> write){

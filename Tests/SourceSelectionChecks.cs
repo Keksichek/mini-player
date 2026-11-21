@@ -6,6 +6,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Automation;
+using VisualTreeHelper=System.Windows.Media.VisualTreeHelper;
+using System.Collections.Generic;
 using System.Windows.Threading;
 using MiniPlayer;
 using Windows.Media;
@@ -24,15 +27,49 @@ static class SourceSelectionChecks
  [STAThread] static int Main(string[] args){
   try{
    SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
-   var task=Run(args[0]);var timeout=System.Diagnostics.Stopwatch.StartNew();
+   var task=Run(args[0],args[1]);var timeout=System.Diagnostics.Stopwatch.StartNew();
    while(!task.IsCompleted){if(timeout.Elapsed.TotalSeconds>30)throw new Exception("Source selection checks timed out");Pump();}
    task.GetAwaiter().GetResult();Console.WriteLine("Source selection checks: "+checks+" PASS");return 0;
   }catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
  }
- static async Task Run(string directory){
+ static IEnumerable<DependencyObject> Descendants(DependencyObject node){
+  yield return node;
+  for(int i=0;i<VisualTreeHelper.GetChildrenCount(node);i++)
+   foreach(var child in Descendants(VisualTreeHelper.GetChild(node,i)))yield return child;
+ }
+ static async Task CheckWorkshop(Player player,string root,string launcherDll,string marker){
+  using var stop=new CancellationTokenSource();
+  var listener=(Task)Call(player,"ListenForWorkshopAsync",stop.Token)!;
+  var launcherType=Assembly.LoadFrom(launcherDll).GetType("WidgetLauncher.LauncherWindow",true)!;
+  var hub=(Window)Activator.CreateInstance(launcherType,root,true,"customize")!;
+  try{
+   hub.ShowActivated=false;hub.ShowInTaskbar=false;hub.Opacity=0;hub.Show();
+   void Click(string name){
+    hub.UpdateLayout();
+    var button=Descendants((FrameworkElement)hub.Content).OfType<Button>().Single(b=>AutomationProperties.GetName(b)==name);
+    button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+   }
+   Click("Создать свой пресет");Click("Выбрать виджет: Мини-плеер");Click("Мой трек");
+   var preview=launcherType.GetField("presetPreview",Private)!.GetValue(hub)!;
+   var surface=preview.GetType().GetProperty("Surface")!.GetValue(preview)!;
+   var elements=(Dictionary<string,FrameworkElement>)surface.GetType().GetProperty("Elements")!.GetValue(surface)!;
+   var title=(TextBlock)elements["title"];
+   for(int i=0;i<100&&title.Text!=marker;i++)await Task.Delay(50);
+   Check(title.Text==marker&&((TextBlock)elements["artist"]).Text=="Workshop artist","Workshop shows metadata from the selected real Windows session");
+   Check(((Image)elements["cover"]).Source!=null&&((TextBlock)elements["time"]).Text==((TextBlock)Field(player,"timeLabel")).Text,
+    "Selected session artwork and playback clock reach the workshop preview");
+  }finally{
+   launcherType.GetMethod("RequestShutdown",BindingFlags.Public|Private)!.Invoke(hub,null);
+   stop.Cancel();await listener;
+  }
+ }
+ static async Task Run(string root,string launcherDll){
+  string directory=Path.Combine(root,"Data","mini-player");
   Directory.CreateDirectory(directory);
   var app=(Application)Activator.CreateInstance(typeof(Player).Assembly.GetType("MiniPlayer.PlayerApplication")!,true)!;
-  typeof(Player).Assembly.GetType("MiniPlayer.LaunchContext")!.GetProperty("DataDirectory",BindingFlags.NonPublic|BindingFlags.Static)!.SetValue(null,directory);
+  var context=typeof(Player).Assembly.GetType("MiniPlayer.LaunchContext")!;
+  context.GetProperty("DataDirectory",BindingFlags.NonPublic|BindingFlags.Static)!.SetValue(null,directory);
+  context.GetProperty("LauncherRoot",BindingFlags.NonPublic|BindingFlags.Static)!.SetValue(null,root);
   var player=new Player();Set(player,"settingsPath",Path.Combine(directory,"settings.json"));Set(player,"busy",true);
   ((System.Windows.Forms.NotifyIcon)Field(player,"tray")).Visible=false;
   try{
@@ -42,7 +79,7 @@ static class SourceSelectionChecks
    using var provider=new MediaPlayer();provider.CommandManager.IsEnabled=false;provider.Volume=0;
    var controls=provider.SystemMediaTransportControls;controls.IsEnabled=true;controls.IsPlayEnabled=true;controls.IsPauseEnabled=true;
    string marker="MiniPlayer source selection "+Guid.NewGuid().ToString("N");
-   controls.DisplayUpdater.Type=MediaPlaybackType.Music;controls.DisplayUpdater.MusicProperties.Title=marker;controls.DisplayUpdater.Update();controls.PlaybackStatus=MediaPlaybackStatus.Paused;
+   controls.DisplayUpdater.Type=MediaPlaybackType.Music;controls.DisplayUpdater.MusicProperties.Title=marker;controls.DisplayUpdater.MusicProperties.Artist="Workshop artist";controls.DisplayUpdater.Update();controls.PlaybackStatus=MediaPlaybackStatus.Paused;
    var manager=await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
    GlobalSystemMediaTransportControlsSession? owned=null;
    for(int i=0;i<50&&owned==null;i++){
@@ -59,6 +96,19 @@ static class SourceSelectionChecks
    while((bool)Field(player,"busy"))await Task.Delay(10);
    Check((await ((GlobalSystemMediaTransportControlsSession)Field(player,"session")).TryGetMediaPropertiesAsync()).Title==marker,"Manual selection changes the player source");
    Check(File.ReadAllText(Path.Combine(directory,"settings.json")).Contains(owned!.SourceAppUserModelId,StringComparison.Ordinal),"Manual source selection is saved");
+   var settings=(Window)Field(player,"settingsWindow");
+   var settingsBody=(FrameworkElement)settings.Content;
+   settingsBody.Measure(new Size(settings.Width,settings.Height));
+   settingsBody.Arrange(new Rect(0,0,settings.Width,settings.Height));settingsBody.UpdateLayout();
+   var profile=Descendants(settingsBody).OfType<ComboBox>().Single(box=>AutomationProperties.GetName(box)=="Пресет для источника");
+   profile.SelectedValue="theme:Кофе";
+   var active=Path.Combine(root,"Data","Customization","mini-player","active.json");
+   using(var preset=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(active))){
+    Check(preset.RootElement.GetProperty("Theme").GetString()=="Кофе"&&Field(player,"customSurface")!=null,
+     "Assigning a preset in settings applies it to the selected Windows source");
+   }
+   profile.SelectedValue="";
+   Check(!File.Exists(active)&&Field(player,"customSurface")==null,"Removing a source assignment restores the original classic appearance");
    var popup=new ContextMenu();Set(player,"sourceMenu",popup);Call(player,"FillSourcePicker");
    var selected=popup.Items.OfType<MenuItem>().Single(item=>item.IsChecked);
    Check(((TextBlock)selected.Header).Text.Contains(marker),"Quick picker marks the current Windows session");
@@ -97,6 +147,7 @@ static class SourceSelectionChecks
    var loadedArtwork=artwork.Source;
    await (Task)Call(player,"Refresh")!;
    Check(ReferenceEquals(loadedArtwork,artwork.Source),"The next media poll reuses the decoded artwork");
+   await CheckWorkshop(player,root,launcherDll,marker);
    Set(player,"busy",true);picker.SelectedIndex=-1;Set(player,"busy",false);Set(player,"refreshSourceLabels",true);
    Task refresh=(Task)Call(player,"Refresh")!;
    if(!refresh.IsCompleted)Check(!(bool)Field(player,"refreshing"),"Metadata loading does not block manual selection");

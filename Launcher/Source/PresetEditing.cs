@@ -18,6 +18,7 @@ namespace WidgetLauncher;
 public sealed partial class LauncherWindow
 {
  string selectedPresetElement="play";
+ readonly HashSet<string> selectedGroup=new();
  static readonly string[] PresetElementIds=WidgetPreset.ElementIds;
  static readonly string[] PresetElementNames=PresetElementIds.Select(PresetSurface.Label).ToArray();
  Window? largePresetWindow;
@@ -63,54 +64,147 @@ public sealed partial class LauncherWindow
  void PresetElementFields(StackPanel panel,WidgetPreset p){
   p.Normalize();
   syncGeometryFields.Clear();
-  PresetChoice(panel,"Элемент",PresetElementIds,PresetElementNames,selectedPresetElement,id=>{selectedPresetElement=id;Render();});
+  PresetChoice(panel,"Элемент",PresetElementIds,PresetElementNames,selectedPresetElement,id=>{
+   if(Keyboard.Modifiers.HasFlag(ModifierKeys.Control)){
+    if(CanGroup(id))ToggleGroupMember(id);else UpdatePresetSelection(selectedPresetElement,true);
+   }else SelectPresetElement(id);
+  });
+  if(selectedGroup.Count>1){AddGroupControls(panel,p);return;}
   var e=p.Elements[selectedPresetElement];
   var pinned=new CheckBox{Content="Закрепить элемент",IsChecked=e.Locked,Margin=new Thickness(0,12,0,4)};AutomationProperties.SetName(pinned,"Закрепить элемент");panel.Children.Add(pinned);
   pinned.Click+=(_,_)=>{p.LockElement(selectedPresetElement,pinned.IsChecked==true);RefreshPresetPreview();Render();};
   if(e.Locked)panel.Children.Add(Label("Закреплён: положение, размеры, видимость, цвета и шрифт сохраняются, в том числе при рандомизации.",11,AccentBrush,new Thickness(0,8,0,4)));
   var fields=new StackPanel{IsEnabled=!e.Locked};panel.Children.Add(fields);
   PresetCheck(fields,"Показывать элемент",p.IsElementVisible(selectedPresetElement),x=>{if(e.Locked)return;e.Visible=x;SyncPresetElementVisibility(p,selectedPresetElement,x);});
+  AddLayerControls(fields,p,selectedPresetElement);
   PresetNumber(fields,"Положение X",0,()=>p.Width-e.Width,()=>e.X,x=>{if(!e.Locked)e.X=x;});
   PresetNumber(fields,"Положение Y",0,()=>p.Height-e.Height,()=>e.Y,x=>{if(!e.Locked)e.Y=x;});
   PresetNumber(fields,"Ширина элемента",8,()=>p.Width-e.X,()=>e.Width,x=>{if(!e.Locked)e.Width=x;});
   PresetNumber(fields,"Высота элемента",8,()=>p.Height-e.Y,()=>e.Height,x=>{if(!e.Locked)e.Height=x;});
-  panel.Children.Add(Label("Перетащи элемент мышью. Потяни за угол выделения, чтобы изменить размер.",11,MutedBrush,new Thickness(0,16,0,0)));
+  panel.Children.Add(Label("Ctrl + щелчок в превью или списке добавляет элемент в группу. Удерживай Alt для свободного движения. У одного элемента размер меняется за угол.",11,MutedBrush,new Thickness(0,16,0,0)));
+ }
+ void AddLayerControls(Panel fields,WidgetPreset preset,string id){
+  var caption=Label("",12,MutedBrush,new Thickness(0,12,0,6));fields.Children.Add(caption);
+  var row=new UniformGrid{Columns=2};
+  fields.Children.Add(row);
+  void UpdateButtons(){
+   int index=Array.IndexOf(preset.LayerOrder,id);
+   caption.Text=$"Слой {index+1} из {preset.LayerOrder.Length}";
+   foreach(Button button in row.Children)Update(button,index,(int)button.Tag);
+  }
+  void Update(Button button,int index,int direction){
+   button.IsEnabled=preset.CanMoveLayer(id,direction);
+   int neighbor=index+direction;
+   if(neighbor<0||neighbor>=preset.LayerOrder.Length)
+    button.ToolTip=direction>0?"Самый верхний слой":"Самый нижний слой";
+   else{
+    string other=preset.LayerOrder[neighbor],name=PresetSurface.Label(other);
+    button.ToolTip=preset.Elements[other].Locked?$"Соседний слой закреплён · {name}":(direction>0?"Поднять над":"Опустить под")+$" «{name}»";
+   }
+   ToolTipService.SetShowOnDisabled(button,true);
+  }
+  void Move(int direction){
+   if(!preset.MoveLayer(id,direction))return;
+   RefreshPresetPreview();UpdateButtons();
+  }
+  foreach(int direction in new[]{-1,1}){
+   var button=PresetButton(direction<0?"Ниже":"Выше",()=>Move(direction));
+   button.Tag=direction;
+   button.Margin=direction<0?new Thickness(0,0,4,0):new Thickness(4,0,0,0);
+   row.Children.Add(button);
+  }
+  UpdateButtons();
  }
  static void SyncPresetElementVisibility(WidgetPreset p,string id,bool visible){switch(id){case "cover":p.ShowCover=visible;break;case "artist":p.ShowArtist=visible;break;case "time":p.ShowTime=visible;break;case "progress":p.ShowProgress=visible;break;case "play":case "previous":case "next":case "repeat":if(visible)p.ShowControls=true;break;}}
  void AttachPresetDragging(PresetPreview previewControl){
   var layer=previewControl.EditLayer;
   SelectInPreview(previewControl);
   string? dragId=null;Point anchor=default;Rect initial=Rect.Empty;int corner=-1;
+  Dictionary<string,Rect>? groupStart=null;
+  bool moved=false;
+  void ShowGuides(double? x,double? y){
+   presetPreview?.SetAlignmentGuides(x,y);
+   largePresetPreview?.SetAlignmentGuides(x,y);
+  }
+  void UpdateDrag(Point pointer,bool freeMove){
+   if(dragId==null||presetDraft==null)return;
+   var delta=pointer-anchor;
+   if(!moved && Math.Abs(delta.X)*previewControl.DisplayScale<SystemParameters.MinimumHorizontalDragDistance &&
+      Math.Abs(delta.Y)*previewControl.DisplayScale<SystemParameters.MinimumVerticalDragDistance)return;
+   moved=true;
+   if(groupStart!=null){
+    var snapGroup=PresetAlignment.MoveSelection(presetDraft,groupStart.Keys,initial.Size,initial.TopLeft+delta,previewControl.DisplayScale,freeMove);
+    MovePresetGroup(groupStart,snapGroup.Position-initial.TopLeft);
+    ShowGuides(snapGroup.VerticalGuide,snapGroup.HorizontalGuide);
+    return;
+   }
+   if(corner>=0){
+    SetPresetBounds(dragId,ResizeFromCorner(initial,corner,delta,new Size(presetDraft.Width,presetDraft.Height)));
+    return;
+   }
+   var snap=PresetAlignment.Move(presetDraft,dragId,initial.TopLeft+delta,previewControl.DisplayScale,freeMove);
+   MovePresetElement(dragId,snap.Position.X,snap.Position.Y);
+   ShowGuides(snap.VerticalGuide,snap.HorizontalGuide);
+  }
+  void Finish(){
+   if(dragId==null)return;
+   dragId=null;groupStart=null;ShowGuides(null,null);
+   if(layer.IsMouseCaptured)layer.ReleaseMouseCapture();
+   EndPresetGesture();
+  }
   layer.MouseLeftButtonDown+=(_,e)=>{
    if(busy||updatePending||page!="customize"||customizationStep!="editor"||presetDraft==null)return;
    anchor=e.GetPosition(layer);
    corner=e.OriginalSource is Border {Tag:int index}?index:-1;
    string? id=corner>=0?selectedPresetElement:previewControl.HitElement(anchor);
-   if(id==null)return;
-   SelectPresetElement(id);
+   if(id==null){if(selectedGroup.Count>1)SelectPresetElement(selectedPresetElement);return;}
+   if(Keyboard.Modifiers.HasFlag(ModifierKeys.Control)){
+    ToggleGroupMember(id);e.Handled=true;return;
+   }
+   if(!selectedGroup.Contains(id)||presetTab!="Детали")SelectPresetElement(id);
    var element=presetDraft.Elements[id];
    if(!element.Locked&&layer.CaptureMouse()){
-    dragId=id;initial=new Rect(element.X,element.Y,element.Width,element.Height);
+    layer.Focus();BeginPresetGesture();
+    moved=false;dragId=id;initial=new Rect(element.X,element.Y,element.Width,element.Height);
+    if(selectedGroup.Count>1){
+     groupStart=SelectionBounds();
+     initial=Rect.Empty;foreach(var box in groupStart.Values)initial.Union(box);
+    }
    }
    e.Handled=true;
   };
   layer.MouseMove+=(_,e)=>{
    if(dragId==null||e.LeftButton!=MouseButtonState.Pressed||presetDraft==null)return;
-   var delta=e.GetPosition(layer)-anchor;
-   if(corner<0)MovePresetElement(dragId,initial.X+delta.X,initial.Y+delta.Y);
-   else SetPresetBounds(dragId,ResizeFromCorner(initial,corner,delta,new Size(presetDraft.Width,presetDraft.Height)));
+   UpdateDrag(e.GetPosition(layer),Keyboard.Modifiers.HasFlag(ModifierKeys.Alt));
    e.Handled=true;
   };
-  layer.MouseLeftButtonUp+=(_,e)=>{if(dragId==null)return;dragId=null;layer.ReleaseMouseCapture();e.Handled=true;};
-  layer.LostMouseCapture+=(_,_)=>dragId=null;
+  layer.MouseLeftButtonUp+=(_,e)=>{
+   if(dragId==null)return;
+   UpdateDrag(e.GetPosition(layer),Keyboard.Modifiers.HasFlag(ModifierKeys.Alt));
+   string? single=!moved&&groupStart!=null?dragId:null;
+   Finish();if(single!=null)SelectPresetElement(single);e.Handled=true;
+  };
+  layer.LostMouseCapture+=(_,_)=>Finish();
+  void AltChanged(object sender,KeyEventArgs e){
+   var key=e.Key==Key.System?e.SystemKey:e.Key;
+   if(dragId==null||corner>=0||key is not (Key.LeftAlt or Key.RightAlt))return;
+   UpdateDrag(Mouse.GetPosition(layer),Keyboard.Modifiers.HasFlag(ModifierKeys.Alt));
+   e.Handled=true;
+  }
+  layer.PreviewKeyDown+=AltChanged;layer.PreviewKeyUp+=AltChanged;
  }
  void SelectInPreview(PresetPreview control){
   bool visible=presetTab=="Детали"&&presetDraft!=null;
-  control.SelectElement(visible?selectedPresetElement:null,visible&&presetDraft!.Elements[selectedPresetElement].Locked);
+  if(visible)PruneGroup();
+  control.SelectElement(visible?selectedPresetElement:null,visible&&presetDraft!.Elements[selectedPresetElement].Locked,visible&&selectedGroup.Count>1?selectedGroup:null);
  }
  void SelectPresetElement(string id){
+  bool hadGroup=selectedGroup.Count>0;selectedGroup.Clear();
+  UpdatePresetSelection(id,hadGroup);
+ }
+ void UpdatePresetSelection(string id,bool groupChanged){
   if(presetDraft==null||presetDetailPanel==null||presetTabButtons==null)return;
-  if(presetTab!="Детали"||id!=selectedPresetElement){
+  if(presetTab!="Детали"||id!=selectedPresetElement||groupChanged){
    presetTab="Детали";selectedPresetElement=id;
    foreach(Button tab in presetTabButtons.Children){
     bool active=Equals(tab.Content,presetTab);
@@ -138,26 +232,36 @@ public sealed partial class LauncherWindow
   SetPresetBounds(id,new Rect(x,y,element.Width,element.Height));
  }
  void SetPresetBounds(string id,Rect box){
-  if(busy||updatePending||presetDraft==null)return;
+  if(WritePresetBounds(id,box))FinishGeometryChange();
+ }
+ bool WritePresetBounds(string id,Rect box){
+  if(busy||updatePending||presetDraft==null)return false;
   var element=presetDraft.Elements[id];
-  if(element.Locked||new Rect(element.X,element.Y,element.Width,element.Height)==box)return;
+  if(element.Locked||new Rect(element.X,element.Y,element.Width,element.Height)==box)return false;
   element.X=box.X;element.Y=box.Y;element.Width=box.Width;element.Height=box.Height;
   void Update(PresetPreview? preview){
    if(preview==null)return;
    preview.Surface.MoveElement(id,box.X,box.Y);preview.Surface.SizeElement(id,box.Width,box.Height);
-   preview.RefreshSelection();
   }
   Update(presetPreview);Update(largePresetPreview);
-  if(presetTab=="Детали"&&selectedPresetElement==id)foreach(var refresh in syncGeometryFields)refresh();
+  return true;
+ }
+ void FinishGeometryChange(){
+  presetPreview?.RefreshSelection();largePresetPreview?.RefreshSelection();
+  if(presetTab=="Детали")foreach(var refresh in syncGeometryFields)refresh();
   QueuePresetDraft();
  }
  void ShowLargePresetPreview(){
   if(largePresetWindow!=null){largePresetWindow.Activate();return;}
   var dialog=new Window{Owner=this,Title="Превью мини-плеера · реальный размер",Width=Math.Min(900,SystemParameters.WorkArea.Width-60),Height=Math.Min(620,SystemParameters.WorkArea.Height-60),WindowStartupLocation=WindowStartupLocation.CenterOwner,Background=BackgroundBrush,Foreground=TextBrush,FontFamily=FontFamily,FontWeight=FontWeight,WindowStyle=WindowStyle.None,ResizeMode=ResizeMode.CanResize};
+  dialog.PreviewKeyDown+=OnPresetHistoryKey;
   foreach(System.Collections.DictionaryEntry resource in Resources)dialog.Resources[resource.Key]=resource.Value;
   var layout=new DockPanel{Margin=new Thickness(18)};dialog.Content=new Border{Background=BackgroundBrush,BorderBrush=ColorBrush("#3B3D50"),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(12),Child=layout};
-  var bar=new DockPanel{Margin=new Thickness(0,0,0,14)};DockPanel.SetDock(bar,Dock.Top);layout.Children.Add(bar);var close=PresetButton("Закрыть превью",dialog.Close);DockPanel.SetDock(close,Dock.Right);bar.Children.Add(close);var caption=Label("Превью · масштаб 100%",16);caption.MouseLeftButtonDown+=(_,e)=>{if(e.LeftButton==MouseButtonState.Pressed)dialog.DragMove();};bar.Children.Add(caption);
+  var bar=new DockPanel{Margin=new Thickness(0,0,0,14)};DockPanel.SetDock(bar,Dock.Top);layout.Children.Add(bar);var close=PresetButton("Закрыть превью",dialog.Close);DockPanel.SetDock(close,Dock.Right);bar.Children.Add(close);
+  var compare=ComparisonButton();compare.Margin=new Thickness(0,0,8,0);DockPanel.SetDock(compare,Dock.Right);bar.Children.Add(compare);
+  var caption=Label("Превью · масштаб 100%",16);caption.MouseLeftButtonDown+=(_,e)=>{if(e.LeftButton==MouseButtonState.Pressed)dialog.DragMove();};bar.Children.Add(caption);
   largePresetPreview=new PresetPreview(manager.Root){FitToView=false,Width=presetDraft!.Width+44,Height=presetDraft.Height+44};largePresetPreview.Update(presetDraft);AttachPresetDragging(largePresetPreview);
+  PaintWorkshopTrack();
   layout.Children.Add(new ScrollViewer{Content=largePresetPreview,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});largePresetWindow=dialog;
   dialog.Closed+=(_,_)=>{largePresetPreview?.Dispose();largePresetPreview=null;largePresetWindow=null;};dialog.Show();
  }
@@ -167,6 +271,7 @@ public sealed partial class LauncherWindow
    largePresetPreview.Width=presetDraft.Width+44;largePresetPreview.Height=presetDraft.Height+44;
    largePresetPreview.Update(presetDraft);SelectInPreview(largePresetPreview);
   }
+  PaintWorkshopTrack();
   if(presetScaleLabel!=null)presetScaleLabel.Text=$"{presetDraft.Width:0} × {presetDraft.Height:0} px · масштаб {presetPreviewZoom*100:0}%\nНажми на элемент, чтобы переместить его или изменить размер.";
  }
  async Task ApplyCurrentPresetAsync(){
@@ -174,17 +279,18 @@ public sealed partial class LauncherWindow
   var widget=catalog.Single(x=>x.Id=="mini-player");
   if(!manager.IsInstalled(widget))await manager.InstallAsync(widget);
   await PresetWidgetUpgrade.EnsureAsync(manager,widget);
-  string appliedPath=Path.Combine(manager.DataDirectory(widget),"preset-applied.json");WidgetManager.RejectLinks(appliedPath);
-  string active=Presets.ActivePath;WidgetManager.RejectLinks(active);byte[]? previous=File.Exists(active)?File.ReadAllBytes(active):null;
-  var draft=presetDraft;
   var store=Presets;
+  using var applyLock=store.AcquireApplyLock();
+  string appliedPath=Path.Combine(manager.DataDirectory(widget),"preset-applied.json");WidgetManager.RejectLinks(appliedPath);
+  string active=store.ActivePath;WidgetManager.RejectLinks(active);byte[]? previous=File.Exists(active)?File.ReadAllBytes(active):null;
+  var draft=presetDraft;
   var preset=draft.Copy();
   preset.Normalize();
   if(preset.Id.Length==0)preset.Id=Guid.NewGuid().ToString("N");
   bool changed=false;
   try{
    if(File.Exists(appliedPath))File.Delete(appliedPath);
-   Presets.Apply(preset);changed=true;string expected=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(active)));
+   store.Apply(preset);changed=true;string expected=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(active)));
    if(manager.IsRunning(widget)){
     if(!EventWaitHandle.TryOpenExisting(manager.InstanceName(widget)+".ApplyPreset",out var signal))throw new IOException("Эта копия мини-плеера ещё не поддерживает пресеты. Обнови её из локального пакета обновления и повтори применение.");
     using(signal)signal.Set();
@@ -203,7 +309,7 @@ public sealed partial class LauncherWindow
    throw new IOException("Плеер не подтвердил применение пресета. Предыдущее оформление восстановлено.");
   }catch{
    if(!changed)throw;
-   if(previous==null)Presets.ClearActive();else{string temporary=active+".restore-"+Guid.NewGuid().ToString("N");try{File.WriteAllBytes(temporary,previous);File.Move(temporary,active,true);}finally{if(File.Exists(temporary))File.Delete(temporary);}}
+   if(previous==null)store.ClearActive();else{string temporary=active+".restore-"+Guid.NewGuid().ToString("N");try{File.WriteAllBytes(temporary,previous);File.Move(temporary,active,true);}finally{if(File.Exists(temporary))File.Delete(temporary);}}
    if(EventWaitHandle.TryOpenExisting(manager.InstanceName(widget)+".ApplyPreset",out var retry))using(retry)retry.Set();throw;
   }
  }

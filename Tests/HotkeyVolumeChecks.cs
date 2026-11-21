@@ -87,6 +87,22 @@ static class HotkeyVolumeChecks
     Check(WindowFromPoint(point)==native.Handle,"Windows initially hit-tests the visible widget button");
     Send("EnableClickThrough");Check((bool)Field("clickThrough")!&&(ReadStyle(native.Handle,-20)&0x20)!=0,"Global hotkey lets Windows pass clicks through the layered player");
     Check(WindowFromPoint(point)==new WindowInteropHelper(underneath).Handle,"Windows hit-tests the separate window beneath the widget at the same point");
+    var badge=(Window)Field("mouseRestoreWindow")!;
+    var badgeHandle=new WindowInteropHelper(badge).Handle;
+    var restoreButton=(Button)badge.Content;
+    var mousePoint=restoreButton.PointToScreen(new Point(restoreButton.ActualWidth/2,restoreButton.ActualHeight/2));
+    var restorePoint=new System.Drawing.Point((int)mousePoint.X,(int)mousePoint.Y);
+    Check(badge.IsVisible&&WindowFromPoint(restorePoint)==badgeHandle,"Only the small restore badge accepts input while clicks pass through");
+    var toggle=(Button)Field("faceClickThrough")!;
+    var toggleCenter=toggle.PointToScreen(new Point(toggle.ActualWidth/2,toggle.ActualHeight/2));
+    Check(Math.Abs(toggleCenter.X-mousePoint.X)<3&&Math.Abs(toggleCenter.Y-mousePoint.Y)<3,"Restore badge stays over the click-through icon");
+    var clientPoint=new IntPtr((8<<16)|10);
+    void ClickBadge(){PostMessage(badgeHandle,0x0201,new IntPtr(1),clientPoint);PostMessage(badgeHandle,0x0202,IntPtr.Zero,clientPoint);Pump();}
+    ClickBadge();Check((bool)Field("clickThrough")!,"A single badge click keeps pass-through on");
+    ClickBadge();Check(!(bool)Field("clickThrough")!&&!badge.IsVisible,"A double-click on the badge restores mouse input without a hotkey");
+    Check(WindowFromPoint(point)==native.Handle,"The player receives input after double-click recovery");
+    Send("EnableClickThrough");foreground.Hide();Pump();Check(!badge.IsVisible,"A hidden player also hides its clickable badge");
+    foreground.Show();Pump();Check(badge.IsVisible,"Showing the player restores its badge while pass-through is on");
     Send("DisableClickThrough");Check(!(bool)Field("clickThrough")!&&(ReadStyle(native.Handle,-20)&0x20)==0&&WindowFromPoint(point)==native.Handle,"Global hotkey restores native mouse input at that point");
    }finally{underneath.Close();}
    Console.WriteLine("TOTAL "+count+" PASS");return 0;

@@ -67,10 +67,26 @@ public sealed record WidgetPreset
  public double MediaX {get;set;}=.5;
  public double MediaY {get;set;}=.5;
  public Dictionary<string,PresetElement> Elements {get;set;}=new();
+ // Back to front, matching the original drawing order for presets saved before layers existed.
+ static readonly string[] DefaultLayerOrder={"cover","title","artist","time","previous","play","next","repeat","pin","lock","clickthrough","hide","menu","progress","volume"};
+ public string[] LayerOrder {get;set;}=DefaultLayerOrder.ToArray();
  public static readonly string[] ElementIds={"cover","title","artist","previous","play","next","repeat","pin","lock","clickthrough","hide","menu","progress","time","volume"};
  public static readonly string[] Shapes={"rounded","rectangle","pill","ellipse","cut","star","square","circle","diamond","hexagon","heart"};
  public static readonly string[] Fits={"cover","contain","stretch"};
- public WidgetPreset Copy()=>this with{Elements=(Elements??new()).Where(x=>x.Value!=null).ToDictionary(x=>x.Key,x=>x.Value.Copy())};
+ public WidgetPreset Copy()=>this with{Elements=(Elements??new()).Where(x=>x.Value!=null).ToDictionary(x=>x.Key,x=>x.Value.Copy()),LayerOrder=(LayerOrder??DefaultLayerOrder).ToArray()};
+ public bool CanMoveLayer(string id,int direction){
+  if(direction is not (-1 or 1))return false;
+  int index=Array.IndexOf(LayerOrder,id),other=index+direction;
+  return index>=0 && other>=0 && other<LayerOrder.Length &&
+         Elements.TryGetValue(id,out var selected) && !selected.Locked &&
+         Elements.TryGetValue(LayerOrder[other],out var neighbor) && !neighbor.Locked;
+ }
+ public bool MoveLayer(string id,int direction){
+  if(!CanMoveLayer(id,direction))return false;
+  int index=Array.IndexOf(LayerOrder,id),other=index+direction;
+  (LayerOrder[index],LayerOrder[other])=(LayerOrder[other],LayerOrder[index]);
+  return true;
+ }
  public PresetElementStyle EffectiveStyle(string id)=>Elements.TryGetValue(id,out var element)&&element.Locked&&element.LockedStyle!=null?element.LockedStyle:new PresetElementStyle{BackgroundColor=BackgroundColor,AccentColor=AccentColor,TextColor=TextColor,BorderColor=BorderColor,FontFamily=FontFamily,FontSize=FontSize,FontWeight=FontWeight,Opacity=Opacity};
  public bool IsElementVisible(string id){if(!Elements.TryGetValue(id,out var e))return false;if(e.Locked)return e.Visible;return e.Visible&&(id switch{"cover"=>ShowCover,"artist"=>ShowArtist,"time"=>ShowTime,"progress"=>ShowProgress,"previous" or "play" or "next" or "repeat"=>ShowControls,_=>true});}
  public void LockElement(string id,bool locked){
@@ -122,6 +138,7 @@ public sealed record WidgetPreset
   MediaPath??="";if(MediaPath.Length>0&&!PresetStore.ValidMediaPath(MediaPath))throw new InvalidDataException("Недопустимый путь изображения в пресете.");
   if(Shape is "square" or "circle"){Height=Math.Clamp(Width,240,420);Width=Height;}
   var defaults=DefaultElements();Elements??=new();
+  LayerOrder=(LayerOrder??DefaultLayerOrder).Where(DefaultLayerOrder.Contains).Concat(DefaultLayerOrder).Distinct().ToArray();
   foreach(string id in Elements.Keys.Except(ElementIds).ToArray())Elements.Remove(id);
   bool addMouseButton=!Elements.ContainsKey("clickthrough")&&Elements.Count>0;
   foreach(string id in ElementIds){
@@ -189,7 +206,7 @@ public static class PresetThemes
 public sealed class PresetStore
 {
  public const long MaximumMediaBytes=20*1024*1024;
- const long MaximumJsonBytes=65536;
+ internal const long MaximumJsonBytes=65536;
  static readonly JsonSerializerOptions Json=new(){WriteIndented=true,PropertyNameCaseInsensitive=true};
  public string Root {get;}
  public PresetStore(string hubRoot,string widgetId="mini-player"){
@@ -200,17 +217,53 @@ public sealed class PresetStore
  public string ResolveMedia(string relative){if(string.IsNullOrEmpty(relative))return "";if(!ValidMediaPath(relative))throw new InvalidDataException("Изображение должно находиться в папке пресетов.");return At(relative);}
  public WidgetPreset? LoadDraft(){string file=At("draft.json");return File.Exists(file)?Read(file):null;}
  public string ActivePath=>At("active.json");
+ // Both windows can change the active preset. Keep ownership until rendering succeeds
+ // or rollback finishes. Windows also releases the handle if its process exits.
+ public IDisposable AcquireApplyLock(){
+  string path=At("apply.lock");Directory.CreateDirectory(Root);
+  try{return new FileStream(path,FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
+  catch(IOException ex)when((ex.HResult & 0xffff) is 32 or 33){
+   throw new IOException("Оформление уже меняется в другом окне. Повтори выбор через несколько секунд.",ex);
+  }
+ }
  public WidgetPreset? LoadActive()=>File.Exists(ActivePath)?Read(ActivePath):null;
  public void Apply(WidgetPreset preset){var copy=preset.Copy();copy.Normalize();if(copy.MediaPath.Length>0&&!File.Exists(ResolveMedia(copy.MediaPath)))throw new IOException("Фоновое изображение не найдено.");Write(ActivePath,copy);}
  public void ClearActive(){if(File.Exists(ActivePath))File.Delete(ActivePath);}
  public void SaveDraft(WidgetPreset preset){var copy=preset.Copy();copy.Normalize();Write(At("draft.json"),copy);}
- public IReadOnlyList<WidgetPreset> List(){
-  string folder=At("Presets");if(!Directory.Exists(folder))return Array.Empty<WidgetPreset>();var result=new List<WidgetPreset>();
+ public WidgetPreset? LoadSaved(string id){
+  if(!Guid.TryParseExact(id,"N",out var guid))return null;
+  string key=guid.ToString("N"),path=At("Presets/"+key+".json");
+  if(!File.Exists(path))return null;
+  var preset=Read(path);
+  if(preset.Id!=key)throw new InvalidDataException("Не удалось проверить идентификатор сохранённого пресета.");
+  return preset;
+ }
+ public IReadOnlyList<WidgetPreset> List()=>ListSaved().Select(entry=>entry.Preset).ToArray();
+ public IReadOnlyList<(WidgetPreset Preset,bool Favorite)> ListSaved(){
+  var result=new List<(WidgetPreset Preset,bool Favorite)>();
+  string folder=At("Presets");if(!Directory.Exists(folder))return result;
+  string markers=At("Favorites");
+  var favorites=Directory.Exists(markers)
+   ?Directory.EnumerateFiles(markers,"*.json").Select(Path.GetFileNameWithoutExtension).ToHashSet(StringComparer.OrdinalIgnoreCase)
+   :new HashSet<string?>(StringComparer.OrdinalIgnoreCase);
   foreach(string path in Directory.EnumerateFiles(folder,"*.json").Take(1000)){
    if(!Guid.TryParseExact(Path.GetFileNameWithoutExtension(path),"N",out var id))continue;
-   try{var preset=Read(path);if(preset.Id==id.ToString("N"))result.Add(preset);}catch(IOException){}catch(InvalidDataException){}catch(UnauthorizedAccessException){}catch(JsonException){}
+   try{var preset=Read(path);if(preset.Id==id.ToString("N"))result.Add((preset,favorites.Contains(preset.Id)));}catch(IOException){}catch(InvalidDataException){}catch(UnauthorizedAccessException){}catch(JsonException){}
   }
-  return result.OrderBy(x=>x.Name,StringComparer.CurrentCultureIgnoreCase).ToArray();
+  return SortSaved(result);
+ }
+ internal static (WidgetPreset Preset,bool Favorite)[] SortSaved(IEnumerable<(WidgetPreset Preset,bool Favorite)> entries)=>
+  entries.OrderByDescending(entry=>entry.Favorite).ThenBy(entry=>entry.Preset.Name,StringComparer.CurrentCultureIgnoreCase).ThenBy(entry=>entry.Preset.Id,StringComparer.Ordinal).ToArray();
+ public void SetFavorite(string id,bool favorite){
+  if(!Guid.TryParseExact(id,"N",out var parsed))throw new InvalidDataException("Неизвестный пресет.");
+  string key=parsed.ToString("N"),marker=At("Favorites/"+key+".json");
+  if(!favorite){if(File.Exists(marker))File.Delete(marker);return;}
+  if(!File.Exists(At("Presets/"+key+".json")))throw new IOException("Этот пресет удалён.");
+  if(File.Exists(marker))return;
+  Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
+  string temporary=marker+"."+Guid.NewGuid().ToString("N")+".tmp";
+  try{File.WriteAllText(temporary,"true");File.Move(temporary,marker,true);}
+  finally{if(File.Exists(temporary))File.Delete(temporary);}
  }
  public WidgetPreset Save(WidgetPreset preset){
   var copy=preset.Copy();copy.Normalize();if(copy.Id.Length==0)copy.Id=Guid.NewGuid().ToString("N");
@@ -227,7 +280,7 @@ public sealed class PresetStore
   }
   return Save(copy);
  }
- public void Delete(string id){if(!Guid.TryParseExact(id,"N",out var parsed))throw new InvalidDataException("Неизвестный пресет.");string path=At("Presets/"+parsed.ToString("N")+".json");if(File.Exists(path))File.Delete(path);}
+ public void Delete(string id){if(!Guid.TryParseExact(id,"N",out var parsed))throw new InvalidDataException("Неизвестный пресет.");string path=At("Presets/"+parsed.ToString("N")+".json");if(File.Exists(path))File.Delete(path);SetFavorite(id,false);}
  WidgetPreset Read(string file){
   PresetPaths.RejectLinks(file);if(new FileInfo(file).Length>MaximumJsonBytes)throw new InvalidDataException("Файл пресета слишком большой.");
   var value=JsonSerializer.Deserialize<WidgetPreset>(File.ReadAllText(file),Json)??throw new InvalidDataException("Файл пресета пуст.");value.Normalize();return value;
@@ -302,6 +355,7 @@ public static class PresetRandomizer
   var media=(mediaPaths??Array.Empty<string>()).Where(PresetStore.ValidMediaPath).Distinct().Prepend("").ToArray();
   var previous=basis?.Copy();previous?.Normalize();bool locked=previous?.Elements.Values.Any(e=>e.Locked)==true;
   var result=locked?previous!:PresetThemes.Create(Pick(PresetThemes.Names));result.Id="";result.Name="Случайный пресет";
+  if(previous!=null&&!locked)result.LayerOrder=previous.LayerOrder;
   var palettes=locked?Palettes.Where(p=>previous!.Elements.Where(e=>e.Value.Locked&&previous.IsElementVisible(e.Key)&&e.Key is not ("cover" or "volume" or "progress")).All(e=>Contrast(p.Background,previous.EffectiveStyle(e.Key).TextColor)>=(e.Key is "title" or "artist" or "time"?4.5:3))).ToArray():Palettes;
   var palette=Pick(palettes.Length>0?palettes:Palettes);
   if(locked&&palettes.Length==0){palette.Background=previous!.BackgroundColor;palette.Text=Contrast(palette.Background,"#252831")>=4.5?"#252831":"#F9F7F0";}
