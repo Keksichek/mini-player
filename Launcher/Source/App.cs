@@ -189,12 +189,18 @@ public sealed partial class LauncherWindow : Window
   var details=new StackPanel{Margin=new Thickness(24,20,24,22)};panel.Children.Add(details);
   var titleRow=new DockPanel();var badge=new Border{Background=ColorBrush(running?"#203A31":installed?"#30283F":"#292B39"),CornerRadius=new CornerRadius(7),Padding=new Thickness(10,5,10,5),VerticalAlignment=VerticalAlignment.Center,Child=Label(running?"Запущен":installed?"Установлен":managed?"Нужна переустановка":"Доступен",10,running?ColorBrush("#A0E2BD"):AccentBrush)};DockPanel.SetDock(badge,Dock.Right);titleRow.Children.Add(badge);titleRow.Children.Add(Label(widget.Name,24));details.Children.Add(titleRow);
   details.Children.Add(Label(widget.Description,12,MutedBrush,new Thickness(0,10,0,18)));
-  var controls=new WrapPanel{Orientation=Orientation.Horizontal};details.Children.Add(controls);
-  var primary=ActionButton(busy?"Подождите…":installed?(running?"Показать":"Запустить"):managed?"Переустановить":"Установить",()=>{if(installed)RunAction(()=>manager.LaunchAsync(widget),"Виджет запущен. Его можно оставить работать после закрытия лаунчера.");else RunAction(async()=>{if(managed)await manager.RemoveAsync(widget);await manager.InstallAsync(widget);},"Готово. Виджет установлен и готов к запуску.");},true);primary.MinWidth=132;primary.Margin=new Thickness(0,0,9,0);controls.Children.Add(primary);
+  var actions=new Grid();actions.ColumnDefinitions.Add(new ColumnDefinition());actions.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});details.Children.Add(actions);
+  var controls=new WrapPanel{Orientation=Orientation.Horizontal};actions.Children.Add(controls);
+  var primary=ActionButton(busy?"Подождите…":installed?(running?"Показать":"Запустить"):managed?"Переустановить":"Установить",()=>{if(installed)RunAction(()=>manager.LaunchAsync(widget),"Виджет запущен. Его можно оставить работать после закрытия лаунчера.");else RunAction(async()=>{if(managed)await manager.RemoveAsync(widget);await manager.InstallAsync(widget);},"Готово. Виджет установлен и готов к запуску.");},true);primary.MinWidth=132;primary.Margin=new Thickness(0,0,9,8);controls.Children.Add(primary);
   if(managed)
   {
-   if(installed&&widget.SupportsSettings){var settings=ActionButton("Настройки",()=>RunAction(()=>manager.LaunchAsync(widget,"--settings"),"Настройки открыты в окне виджета."));settings.Margin=new Thickness(0,0,9,0);controls.Children.Add(settings);}
-   var remove=ActionButton("Удалить",()=>ConfirmRemove(widget));remove.Foreground=ColorBrush("#F0A2AC");remove.Background=Brushes.Transparent;controls.Children.Add(remove);
+   if(installed&&widget.SupportsSettings){var settings=ActionButton("Настройки",()=>RunAction(()=>manager.LaunchAsync(widget,"--settings"),"Настройки открыты в окне виджета."));settings.Margin=new Thickness(0,0,9,8);controls.Children.Add(settings);}
+   var location=ActionButton("Посмотреть расположение",()=>RunAction(()=>{
+    var folder=manager.WidgetDirectory(widget);WidgetManager.RejectLinks(folder);
+    if(!Directory.Exists(folder))throw new DirectoryNotFoundException("Папка виджета отсутствует. Переустановите виджет.");
+    Process.Start(new ProcessStartInfo("explorer.exe"){Arguments="\""+folder+"\"",UseShellExecute=true});return Task.CompletedTask;
+   },""));location.ToolTip=manager.WidgetDirectory(widget);location.Margin=new Thickness(0,0,9,8);controls.Children.Add(location);
+   var remove=ActionButton("Удалить",()=>ConfirmRemove(widget));remove.Foreground=ColorBrush("#F0A2AC");remove.Background=Brushes.Transparent;remove.Margin=new Thickness(10,0,0,0);remove.VerticalAlignment=VerticalAlignment.Top;Grid.SetColumn(remove,1);actions.Children.Add(remove);
   }
   var version=Label(widget.Version+"  ·  Рабочий стол Windows",10,ColorBrush("#777B91"),new Thickness(0,14,0,0));details.Children.Add(version);
   return Card(panel,new Thickness(0));

@@ -67,7 +67,7 @@ Compile-App 'MiniPlayer' (Join-Path $projectRoot 'Source') (Join-Path $widget 'A
 Compile-App 'Launcher' (Join-Path $projectRoot 'Launcher\Source') (Join-Path $payload 'Launcher.dll')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'App\MiniPlayer.runtimeconfig.json') -Destination (Join-Path $payload 'Launcher.runtimeconfig.json') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'Source\Fonts') -Destination $payload -Recurse -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'Source\Player.ico') -Destination (Join-Path $payload 'Player.ico') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'Launcher\Launcher.ico') -Destination (Join-Path $payload 'Launcher.ico') -Force
 foreach($name in @('Assets','Catalog','Packages','Runtime')){New-Item -ItemType Directory -Force -Path (Join-Path $payload $name) | Out-Null}
 Copy-Item -LiteralPath (Join-Path $projectRoot 'screenshots\Лаванда.png') -Destination (Join-Path $payload 'Assets\mini-player.png') -Force
 if(Test-Path -LiteralPath (Join-Path $projectRoot 'Launcher\Assets')){Get-ChildItem -LiteralPath (Join-Path $projectRoot 'Launcher\Assets') | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payload 'Assets') -Recurse -Force}}

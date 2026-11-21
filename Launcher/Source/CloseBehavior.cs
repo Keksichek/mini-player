@@ -39,7 +39,7 @@ public sealed partial class LauncherWindow
  void HideLauncherToTray(){
   try{
    if(launcherTray==null){
-    string icon=Path.Combine(manager.Root,"Player.ico");
+    string icon=Path.Combine(manager.Root,"Launcher.ico");
     launcherTrayImage=File.Exists(icon)?new System.Drawing.Icon(icon):(System.Drawing.Icon)System.Drawing.SystemIcons.Application.Clone();
     launcherTray=new System.Windows.Forms.NotifyIcon{Icon=launcherTrayImage,Text="VibeWidgetsHub alpha"};
     var menu=new System.Windows.Forms.ContextMenuStrip();

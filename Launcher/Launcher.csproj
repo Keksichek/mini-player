@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings><GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AssemblyName>Launcher</AssemblyName>
+    <ApplicationIcon>Launcher.ico</ApplicationIcon>
   </PropertyGroup>
  <ItemGroup><Compile Include="../Shared/UpdateProtocol.cs" Link="UpdateProtocol.cs"/><EmbeddedResource Include="../Shared/UpdatePublicKey.xml"><LogicalName>UpdatePublicKey.xml</LogicalName></EmbeddedResource></ItemGroup>
+ <ItemGroup><Content Include="Launcher.ico" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

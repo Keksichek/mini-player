@@ -1,0 +1,8 @@
+<Canvas xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Width="256" Height="256">
+ <Border Width="256" Height="256" CornerRadius="58" Background="#171522"/>
+ <Border Canvas.Left="40" Canvas.Top="40" Width="78" Height="78" CornerRadius="20" Background="#B9A1FF"/>
+ <Border Canvas.Left="138" Canvas.Top="40" Width="78" Height="78" CornerRadius="20" Background="#7260B5"/>
+ <Border Canvas.Left="40" Canvas.Top="138" Width="78" Height="78" CornerRadius="20" Background="#7260B5"/>
+ <Border Canvas.Left="138" Canvas.Top="138" Width="78" Height="78" CornerRadius="20" Background="#87DFCF"/>
+ <Path Data="M 159,177 L 195,177 M 177,159 L 177,195" Stroke="#17252B" StrokeThickness="10" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+</Canvas>

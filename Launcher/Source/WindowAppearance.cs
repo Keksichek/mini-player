@@ -18,7 +18,7 @@ public sealed partial class LauncherWindow
   PopulateInterfaceResources();
   WindowStyle=WindowStyle.None;
   WindowChrome.SetWindowChrome(this,new WindowChrome{CaptionHeight=48,ResizeBorderThickness=new Thickness(6),GlassFrameThickness=new Thickness(0),CornerRadius=new CornerRadius(12),UseAeroCaptionButtons=false});
-  string icon=Path.Combine(manager.Root,"Player.ico");if(File.Exists(icon))Icon=BitmapFrame.Create(new Uri(icon));
+  string icon=Path.Combine(manager.Root,"Launcher.ico");if(File.Exists(icon))Icon=BitmapFrame.Create(new Uri(icon));
   SourceInitialized+=(_,_)=>{
    var handle=new WindowInteropHelper(this).Handle;int dark=preferences.LightMode?0:1,border=preferences.LightMode?0x00E6D7DC:0x003A2C2B,corners=2;
    DwmSetWindowAttribute(handle,20,ref dark,4);DwmSetWindowAttribute(handle,34,ref border,4);DwmSetWindowAttribute(handle,33,ref corners,4);
