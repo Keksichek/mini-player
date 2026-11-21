@@ -10,6 +10,18 @@ public sealed partial class Player
  int seekRequest;
  bool seekPending;
 
+ static string FormatTrackTime(double seconds){
+  long totalSeconds=(long)Math.Max(0,seconds);
+  long totalMinutes=totalSeconds/60;
+  return totalMinutes<60
+   ? $"{totalMinutes}:{totalSeconds%60:00}"
+   : $"{totalMinutes/60}:{totalMinutes%60:00}:{totalSeconds%60:00}";
+ }
+
+ void DisplayTrackTime(double position,double duration){
+  timeLabel.Text=$"{FormatTrackTime(position)} / {FormatTrackTime(duration)}";
+ }
+
  void SynchronizeTimeline(GlobalSystemMediaTransportControlsSessionTimelineProperties timeline,
   GlobalSystemMediaTransportControlsSessionPlaybackInfo playback){
   playbackClock.Synchronize(timeline.Position.TotalSeconds,timeline.LastUpdatedTime,
@@ -31,7 +43,7 @@ public sealed partial class Player
   try{
    double end=timelineDuration>0?Math.Min(timelineDuration,seek.Maximum):seek.Maximum;
    seek.Value=Math.Clamp(playbackClock.Position,seek.Minimum,Math.Max(seek.Minimum,end));
-   timeLabel.Text=$"{TimeSpan.FromSeconds(seek.Value):m\\:ss} / {TimeSpan.FromSeconds(timelineDuration):m\\:ss}";
+   DisplayTrackTime(seek.Value,timelineDuration);
   }finally{updatingSeek=false;}
  }
 
