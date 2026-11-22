@@ -386,11 +386,12 @@ namespace WidgetLauncherSetup
    string[] installedIds=InstalledIds(root);
    foreach(string id in installedIds)foreach(string parent in new[]{"Widgets","Data"})CheckTree(Child(root,parent+"\\"+id));
    string hubSettings=Child(root,"Data\\hub-settings.json"),startupError=Child(root,"Data\\autostart-error.txt");NoLinks(hubSettings);NoLinks(startupError);
+   string obsSettings=Child(root,@"Data\obs-settings.json"),obsTemp=obsSettings+".tmp";NoLinks(obsSettings);NoLinks(obsTemp);
    string downloads=Child(root,".update-downloads");CheckTree(downloads);
    if(!test){RemoveShortcuts(root);RemoveAutostart(root);using(var key=Registry.CurrentUser.OpenSubKey(RegistryPath(root))){if(key!=null&&!String.Equals(key.GetValue("InstallLocation") as string,root,StringComparison.OrdinalIgnoreCase))throw new IOException("Запись установки относится к другой папке.");}Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(root),false);}
    foreach(string id in installedIds)foreach(string parent in new[]{"Widgets","Data"})DeleteTree(Child(root,parent+"\\"+id),root);
    foreach(string file in ownedPresets)DeleteFile(file);
-   DeleteFile(hubSettings);
+   DeleteFile(hubSettings);DeleteFile(obsSettings);DeleteFile(obsTemp);
    DeleteFile(startupError);
    DeleteTree(downloads,root);
    // Keep the uninstaller available if a locked file prevents completing the operation.

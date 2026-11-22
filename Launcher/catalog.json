@@ -6,7 +6,8 @@
     "Version": "0.1",
     "Package": "mini-player.zip",
     "Executable": "App/MiniPlayer.exe",
-    "Available": true
+    "Available": true,
+    "ObsProtocol": 1
   },
   {
     "Id": "notes",
@@ -17,6 +18,7 @@
     "Executable": "Notes.exe",
     "Available": true,
     "LaunchKind": "exe",
-    "SupportsSettings": false
+    "SupportsSettings": false,
+    "ObsProtocol": 1
   }
 ]

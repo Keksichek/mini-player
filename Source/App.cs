@@ -178,7 +178,7 @@ public sealed partial class Player : Window
  {
   if(busy||closing)return;
   if((IsVisible||settingsWindow?.IsVisible==true)&&!VolumeIsBeingEdited)RefreshAudioTargets();
-  if(manager==null)return;busy=true;
+  if(manager==null)return;busy=true;obsValid=false;
   try{
    var list=manager.GetSessions().ToList();
    if(refreshSourceLabels||!list.SequenceEqual(sessions)){
@@ -214,8 +214,8 @@ public sealed partial class Player : Window
    }
    if(cover.Source==null && media.Thumbnail!=null && Environment.TickCount64>=nextArtworkAttempt)
     await LoadArtworkAsync(media.Thumbnail,requestedSession,key);
-   UpdateSourceBehavior();
-  }catch{SetMediaPlaying(false);status.Text="Ожидание медиаисточника…";}finally{busy=false;refreshing=false;}
+   UpdateSourceBehavior();obsValid=true;
+  }catch{SetMediaPlaying(false);status.Text="Ожидание медиаисточника…";}finally{busy=false;refreshing=false;ExportObs();}
  }
 
  long nextArtworkAttempt;

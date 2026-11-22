@@ -138,7 +138,7 @@ public sealed partial class LauncherWindow : Window
   ConfigureCloseBehavior();
   ConfigureAutomaticUpdates();
   Closed+=(_,_)=>ReleasePresetPreview();
-  ApplyHubTheme();Render();
+  ConfigureObs();ApplyHubTheme();Render();
  }
  TextBlock Label(string text,double size,Brush? color=null,Thickness? margin=null)=>new(){Text=text,FontSize=size,Foreground=color??TextBrush,TextWrapping=TextWrapping.Wrap,Margin=margin??new Thickness(0)};
  Button ActionButton(string title,Action action,bool accent=false)
@@ -161,7 +161,7 @@ public sealed partial class LauncherWindow : Window
   notice.Text=message;notice.Visibility=string.IsNullOrWhiteSpace(message)?Visibility.Collapsed:Visibility.Visible;content.Children.Add(notice);
   if(page=="settings"){RenderSettings();return;}
   if(page=="customize"){RenderCustomization();return;}
-  if(page=="obs"){content.Children.Add(Card(Label("скоро будет, братва",22,AccentBrush),new Thickness(30)));return;}
+  if(page=="obs"){RenderObs();return;}
   var widgets=catalog.Where(x=>x.Available&&(page!="installed"||manager.HasInstallation(x))).ToList();
   foreach(var widget in widgets)content.Children.Add(WidgetCard(widget));
   if(page=="installed"&&widgets.Count==0)

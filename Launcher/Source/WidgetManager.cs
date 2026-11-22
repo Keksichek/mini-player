@@ -23,6 +23,7 @@ public sealed record Widget
  public string Executable { get; init; } = "";
  public string LaunchKind { get; init; } = "dotnet";
  public bool SupportsSettings { get; init; } = true;
+ public int ObsProtocol { get; init; }
  public bool Available { get; init; }
 }
 
