@@ -83,7 +83,8 @@ static class InstallerChecks
    Check(Directory.Exists(Path.Combine(root,"Widgets"))&&Directory.Exists(Path.Combine(root,"Data")),"Widgets and data folders live under launcher root");
    string settings=Path.Combine(root,"Data","mini-player","settings.json"),widget=Path.Combine(root,"Widgets","mini-player","App","MiniPlayer.dll");
    Write(settings,"settings");Write(widget,"widget");Write(Path.Combine(root,"personal.txt"),"personal");
-   Install(root,"v2");
+   string obsFont=Path.Combine(root,"Data","ObsFonts",new string('a',64)+".ttf"),foreignFont=Path.Combine(root,"Data","ObsFonts","personal.txt");Write(obsFont,"font");Write(foreignFont,"keep");
+   Install(root,"v2");Check(File.ReadAllText(obsFont)=="font","Hub update preserves uploaded OBS fonts");
    Check(File.ReadAllText(Path.Combine(root,"Launcher.dll"))=="v2","Updating replaces launcher files");
    Check(File.ReadAllText(settings)=="settings"&&File.ReadAllText(widget)=="widget","Updating preserves installed widget and settings");
    using(var held=new FileStream(Path.Combine(root,"Launcher.dll"),FileMode.Open,FileAccess.Read,FileShare.Read))Reject("Locked file aborts update",()=>Install(root,"v3"));
@@ -139,7 +140,7 @@ static class InstallerChecks
    Write(Path.Combine(root,"Widgets","unrelated","keep.txt"),"other");
    Write(Path.Combine(root,"Widgets","clock",".widget-install.json"),"{\"Id\":\"clock\",\"Executable\":\"App/Clock.exe\"}");
    Write(Path.Combine(root,"Data","clock","settings.json"),"{}");
-   InstallEngine.Remove(root,true);
+   InstallEngine.Remove(root,true);Check(!File.Exists(obsFont)&&File.ReadAllText(foreignFont)=="keep","Uninstall removes owned OBS fonts and keeps unrelated files");
    Check(!Directory.Exists(Path.Combine(root,"Widgets","clock"))&&!Directory.Exists(Path.Combine(root,"Data","clock")),"Uninstall discovers an installed widget omitted by an older catalog update");
    Check(!File.Exists(Path.Combine(root,"Launcher.exe"))&&!File.Exists(markerPath),"Uninstall removes owned launcher files and marker");
    Check(!File.Exists(settings)&&!File.Exists(widget),"Uninstall removes catalog widget and its settings");

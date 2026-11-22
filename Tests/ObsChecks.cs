@@ -14,7 +14,7 @@ class ObsChecks{
  File.WriteAllText(Path.Combine(root,"Catalog","widgets.json"),JsonSerializer.Serialize(widgets));var manager=new WidgetManager(root);
  foreach(var w in widgets){Directory.CreateDirectory(manager.WidgetDirectory(w));File.WriteAllText(manager.Executable(w),"");File.WriteAllText(Path.Combine(manager.WidgetDirectory(w),".widget-install.json"),JsonSerializer.Serialize(w));Directory.CreateDirectory(manager.DataDirectory(w));}
  var noteFile=Path.Combine(root,"Data","notes","notes.json");File.WriteAllText(noteFile,"[{\"id\":\"public\",\"text\":\"Live note\"},{\"id\":\"private\",\"text\":\"SECRET\"}]");
- string url;
+ string url;string fontId="";byte[] fontData=File.ReadAllBytes(Path.Combine(Environment.CurrentDirectory,"Source","Fonts","Onest-Bold.ttf"));
  using(var bridge=new ObsBridge(manager)){
   var port=new TcpListener(IPAddress.Loopback,0);port.Start();bridge.Settings.Port=((IPEndPoint)port.LocalEndpoint).Port;port.Stop();bridge.Entry("notes").NoteId="public";bridge.Enable(widgets[0],true);url=bridge.Url("notes");if(args.Length>1){File.WriteAllText(args[1],url);await Task.Delay(30000);}
   using var client=new HttpClient(new HttpClientHandler{UseProxy=false}){Timeout=TimeSpan.FromSeconds(5)};
@@ -32,10 +32,16 @@ class ObsChecks{
   bridge.ApplyAppearance(draft);draft.Width=800;
   var live=JsonSerializer.Deserialize<ObsState>(await client.GetStringAsync(bridge.Url("mini-player").Replace("/overlay/","/state/")))!;
   Check(live.Appearance!.Width==480&&!live.Appearance.Parts["artist"].Visible,"Applied layout reaches HTTP state and remains independent from draft");
+  string fontSource=Path.Combine(root,"custom.ttf");File.WriteAllBytes(fontSource,fontData);fontId=bridge.ImportFont(fontSource);Check(bridge.ImportFont(fontSource)==fontId&&bridge.Settings.Fonts.Count==1,"Duplicate font import is deduplicated");File.Delete(fontSource);
+  string fontUrl=bridge.Url("mini-player").Replace("/overlay/","/font/")+"/"+fontId;var fontResponse=await client.GetAsync(fontUrl);Check(fontResponse.Content.Headers.ContentType!.MediaType=="font/ttf"&&Convert.ToBase64String(await fontResponse.Content.ReadAsByteArrayAsync())==Convert.ToBase64String(fontData),"Imported font remains available after original file is deleted");
+  Check((await client.GetAsync(fontUrl.Replace(bridge.Entry("mini-player").Token,"wrong"))).StatusCode==HttpStatusCode.NotFound,"Font route rejects wrong token");
+  Check((await client.GetAsync(fontUrl.Replace(fontId,"%2e%2e%2fobs-settings.json"))).StatusCode==HttpStatusCode.NotFound,"Font route rejects path traversal");
+  var withFont=live.Appearance.Copy();withFont.FontId=fontId;bridge.ApplyAppearance(withFont);Check(bridge.State("mini-player").Appearance!.FontId==fontId,"Custom font selection reaches overlay");
+  bridge.SavePreset("Font",withFont);bridge.Enable(widgets[2],false);Check((await client.GetAsync(fontUrl)).StatusCode==HttpStatusCode.NotFound,"Disabling player also revokes its font URL");bridge.Enable(widgets[2],true);
   bridge.SavePreset("Round",ObsAppearance.Preset("circle"));Check(bridge.State("mini-player").Appearance!.Width==480,"Saving preset leaves current stream unchanged");
   File.WriteAllText(file,JsonSerializer.Serialize(new ObsState(Title:"stale",UpdatedAt:1)));Check(bridge.State("future").Title=="","Stale state hides stopped widget");
   bridge.Enable(widgets[0],false);Check((await client.GetAsync(url)).StatusCode==HttpStatusCode.NotFound,"Disabling immediately revokes source");bridge.Enable(widgets[0],true);
  }
- using(var restored=new ObsBridge(manager)){Check(restored.Url("notes")==url&&restored.Entry("notes").NoteId=="public","Links and note selection survive restart");Check(restored.Entry("mini-player").Appearance.Width==480&&restored.Settings.PlayerPresets.ContainsKey("Round"),"Applied appearance and named presets survive restart");restored.Start();using var client=new HttpClient(new HttpClientHandler{UseProxy=false});Check((await client.GetAsync(url)).IsSuccessStatusCode,"Same source works after service restart");}
+ using(var restored=new ObsBridge(manager)){Check(restored.Entry("mini-player").Appearance.FontId==fontId&&File.Exists(restored.FontPath(fontId))&&restored.Settings.PlayerPresets["Font"].FontId==fontId,"Font file and selection survive restart and preset save");Check(restored.Url("notes")==url&&restored.Entry("notes").NoteId=="public","Links and note selection survive restart");Check(restored.Entry("mini-player").Appearance.Width==480&&restored.Settings.PlayerPresets.ContainsKey("Round"),"Applied appearance and named presets survive restart");restored.Start();using var client=new HttpClient(new HttpClientHandler{UseProxy=false});Check((await client.GetAsync(url)).IsSuccessStatusCode,"Same source works after service restart");}
  return 0;}catch(Exception ex){Console.Error.WriteLine(ex);return 1;}}
 }

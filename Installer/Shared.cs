@@ -321,6 +321,10 @@ namespace WidgetLauncherSetup
    }
    return result;
   }
+  static List<string> OwnedObsFonts(string root){
+   var result=new List<string>();string folder=Child(root,@"Data\ObsFonts");NoLinks(folder);if(!Directory.Exists(folder))return result;
+   foreach(string file in Directory.GetFiles(folder)){string hash=Path.GetFileNameWithoutExtension(file),ext=Path.GetExtension(file);if(hash.Length!=64||!hash.All(Uri.IsHexDigit)||(ext!=".ttf"&&ext!=".otf"))continue;NoLinks(file);result.Add(file);}return result;
+  }
   static bool IsUpdateBackup(string folder){
    const string prefix=".update-preserved-";
    string name=Path.GetFileName(folder);Guid id;
@@ -382,7 +386,7 @@ namespace WidgetLauncherSetup
    StopApplications(root);for(int i=0;i<40;i++){try{CheckStopped(root);break;}catch(IOException){if(i==39)throw;Thread.Sleep(250);}}
    // Preflight every path before the first delete. Never follow junctions or symlinks.
    foreach(string file in marker.Files)NoLinks(Child(root,file));
-   var ownedPresets=OwnedPresetFiles(root);
+   var ownedPresets=OwnedPresetFiles(root);var ownedObsFonts=OwnedObsFonts(root);
    string[] installedIds=InstalledIds(root);
    foreach(string id in installedIds)foreach(string parent in new[]{"Widgets","Data"})CheckTree(Child(root,parent+"\\"+id));
    string hubSettings=Child(root,"Data\\hub-settings.json"),startupError=Child(root,"Data\\autostart-error.txt");NoLinks(hubSettings);NoLinks(startupError);
@@ -390,7 +394,7 @@ namespace WidgetLauncherSetup
    string downloads=Child(root,".update-downloads");CheckTree(downloads);
    if(!test){RemoveShortcuts(root);RemoveAutostart(root);using(var key=Registry.CurrentUser.OpenSubKey(RegistryPath(root))){if(key!=null&&!String.Equals(key.GetValue("InstallLocation") as string,root,StringComparison.OrdinalIgnoreCase))throw new IOException("Запись установки относится к другой папке.");}Registry.CurrentUser.DeleteSubKeyTree(RegistryPath(root),false);}
    foreach(string id in installedIds)foreach(string parent in new[]{"Widgets","Data"})DeleteTree(Child(root,parent+"\\"+id),root);
-   foreach(string file in ownedPresets)DeleteFile(file);
+   foreach(string file in ownedPresets)DeleteFile(file);foreach(string file in ownedObsFonts)DeleteFile(file);
    DeleteFile(hubSettings);DeleteFile(obsSettings);DeleteFile(obsTemp);
    DeleteFile(startupError);
    DeleteTree(downloads,root);
