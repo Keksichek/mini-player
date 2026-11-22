@@ -11,9 +11,9 @@ using System.Threading.Tasks;
 
 namespace WidgetLauncher;
 
-public sealed record ObsState(int Version=1,string Title="",string Subtitle="",string Image="",double Progress=0,long UpdatedAt=0,double Position=0,double Duration=0);
-public sealed class ObsEntry { public bool Enabled{get;set;} public string Token{get;set;}=Guid.NewGuid().ToString("N"); public string NoteId{get;set;}=""; }
-public sealed class ObsPreferences { public int Port{get;set;}=18765; public Dictionary<string,ObsEntry> Widgets{get;set;}=new(); }
+public sealed record ObsState(int Version=1,string Title="",string Subtitle="",string Image="",double Progress=0,long UpdatedAt=0,double Position=0,double Duration=0,ObsAppearance? Appearance=null);
+public sealed class ObsEntry { public bool Enabled{get;set;} public string Token{get;set;}=Guid.NewGuid().ToString("N"); public string NoteId{get;set;}=""; public ObsAppearance Appearance{get;set;}=new(); }
+public sealed class ObsPreferences { public Dictionary<string,ObsAppearance> PlayerPresets{get;set;}=new(); public int Port{get;set;}=18765; public Dictionary<string,ObsEntry> Widgets{get;set;}=new(); }
 
 public sealed class ObsBridge:IDisposable
 {
@@ -25,6 +25,8 @@ public sealed class ObsBridge:IDisposable
  public ObsBridge(WidgetManager manager){this.manager=manager;try{Settings=JsonSerializer.Deserialize<ObsPreferences>(File.ReadAllText(SettingsPath))??new();}catch{Settings=new();}if(Settings.Port<1024||Settings.Port>65535)Settings.Port=18765;}
  public ObsEntry Entry(string id){lock(gate){if(!Settings.Widgets.TryGetValue(id,out var e))Settings.Widgets[id]=e=new();return e;}}
  public void Save(){lock(gate){WidgetManager.RejectLinks(Path.GetDirectoryName(SettingsPath)!);Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);File.WriteAllText(SettingsPath+".tmp",JsonSerializer.Serialize(Settings));File.Move(SettingsPath+".tmp",SettingsPath,true);}}
+ public void ApplyAppearance(ObsAppearance appearance){lock(gate){var entry=Entry("mini-player");var old=entry.Appearance;entry.Appearance=appearance.Copy();try{Save();}catch{entry.Appearance=old;throw;}}}
+ public void SavePreset(string name,ObsAppearance appearance){if(string.IsNullOrWhiteSpace(name)||name.Length>60)throw new InvalidDataException("Введите название до 60 символов.");lock(gate){Settings.PlayerPresets.TryGetValue(name,out var old);Settings.PlayerPresets[name]=appearance.Copy();try{Save();}catch{if(old==null)Settings.PlayerPresets.Remove(name);else Settings.PlayerPresets[name]=old;throw;}}}
  public string Url(string id)=>$"http://127.0.0.1:{Settings.Port}/overlay/{Entry(id).Token}/{id}";
  public void Start(){if(listener!=null)return;var next=new TcpListener(IPAddress.Loopback,Settings.Port);next.Start(16);listener=next;_=Accept(next);}
  async Task Accept(TcpListener server){try{while(!cancel.IsCancellationRequested){var client=await server.AcceptTcpClientAsync(cancel.Token);if(!slots.Wait(0)){client.Dispose();continue;}_=Serve(client);}}catch(OperationCanceledException){}catch(SocketException){}catch(ObjectDisposedException){}}
@@ -44,7 +46,7 @@ public sealed class ObsBridge:IDisposable
   if(widget.ObsProtocol!=1)return new();
   try{string file=Path.Combine(manager.DataDirectory(widget),"obs.json");WidgetManager.RejectLinks(file);if(new FileInfo(file).Length>2*1024*1024)return new();var state=JsonSerializer.Deserialize<ObsState>(File.ReadAllText(file));
    if(state==null||state.Version!=1||Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-state.UpdatedAt)>10000)return new();
-   return state with {Title=(state.Title??"")[..Math.Min(state.Title?.Length??0,8000)],Subtitle=(state.Subtitle??"")[..Math.Min(state.Subtitle?.Length??0,1000)],Image=state.Image!=null&&state.Image.StartsWith("data:image/png;base64,",StringComparison.Ordinal)&&state.Image.Length<1500000?state.Image:"",Progress=double.IsFinite(state.Progress)?Math.Clamp(state.Progress,0,1):0,Position=double.IsFinite(state.Position)?Math.Max(0,state.Position):0,Duration=double.IsFinite(state.Duration)?Math.Max(0,state.Duration):0};
+   return state with {Title=(state.Title??"")[..Math.Min(state.Title?.Length??0,8000)],Subtitle=(state.Subtitle??"")[..Math.Min(state.Subtitle?.Length??0,1000)],Image=state.Image!=null&&state.Image.StartsWith("data:image/png;base64,",StringComparison.Ordinal)&&state.Image.Length<1500000?state.Image:"",Progress=double.IsFinite(state.Progress)?Math.Clamp(state.Progress,0,1):0,Position=double.IsFinite(state.Position)?Math.Max(0,state.Position):0,Duration=double.IsFinite(state.Duration)?Math.Max(0,state.Duration):0,Appearance=id=="mini-player"?(Entry(id).Appearance??new()).Copy():null};
   }catch{return new();}
  }
  async Task Serve(TcpClient client){
@@ -79,7 +81,15 @@ body.note #card{width:auto;max-width:calc(100% - 24px);margin:12px;padding:22px;
 const card=document.getElementById('card'),title=document.getElementById('title'),sub=document.getElementById('subtitle'),cover=document.getElementById('cover'),fill=document.getElementById('fill'),elapsed=document.getElementById('elapsed'),duration=document.getElementById('duration');
 if(location.pathname.endsWith('/notes'))document.body.classList.add('note');
 function time(value){let n=Math.max(0,Math.floor(Number(value)||0)),h=Math.floor(n/3600),m=Math.floor(n/60)%60,s=String(n%60).padStart(2,'0');return h?h+':'+String(m).padStart(2,'0')+':'+s:Math.floor(n/60)+':'+s}
-async function refresh(){try{const r=await fetch(location.pathname.replace('/overlay/','/state/'),{cache:'no-store'});if(!r.ok)throw Error();const s=await r.json();title.textContent=s.Title||'';sub.textContent=s.Subtitle||'';sub.style.display=s.Subtitle?'block':'none';cover.style.display=s.Image?'block':'none';if(s.Image&&cover.getAttribute('src')!==s.Image)cover.src=s.Image;elapsed.textContent=time(s.Position);duration.textContent=s.Duration>0?time(s.Duration):'—:—';fill.style.width=((s.Progress||0)*100)+'%';card.style.display=s.Title?'flex':'none';}catch{card.style.display='none';}setTimeout(refresh,1000)}refresh();
+let appearanceKey='';
+function appearance(a){if(!a)return;const key=JSON.stringify(a);if(key===appearanceKey)return;appearanceKey=key;
+const map={cover:'art',title:'title',artist:'subtitle',elapsed:'elapsed',duration:'duration',bar:'bar'};
+card.style.cssText=`position:relative;display:block;box-sizing:content-box;width:${a.Width}px;height:${a.Height}px;max-width:none;min-height:0;margin:4px;padding:0;border:0;border-radius:${a.Shape==='circle'?a.Width/2:a.Shape==='rectangle'?0:a.Radius}px;overflow:hidden;background:transparent;`;
+let bg=document.getElementById('custom-background');if(!bg){bg=document.createElement('div');bg.id='custom-background';card.prepend(bg);}bg.style.cssText=`position:absolute;inset:0;box-sizing:border-box;border:${a.BorderWidth}px solid ${a.Border};border-radius:inherit;background:rgba(${parseInt(a.Background.slice(1,3),16)},${parseInt(a.Background.slice(3,5),16)},${parseInt(a.Background.slice(5,7),16)},${a.Opacity});pointer-events:none`;
+for(const [key,id] of Object.entries(map)){const p=a.Parts[key],e=document.getElementById(id);card.appendChild(e);e.style.cssText=`position:absolute;box-sizing:border-box;left:${p.X}px;top:${p.Y}px;width:${p.Width}px;height:${p.Height}px;margin:0;display:${p.Visible?'block':'none'};font-family:'${a.Font}';font-size:${p.FontSize}px;line-height:1.25;overflow:hidden;white-space:nowrap;color:${key==='title'?a.Text:a.Secondary};`;if(key==='duration')e.style.textAlign='right';if(key==='cover'){if(p.Visible)e.style.display='grid';e.style.borderRadius='12px';e.style.overflow='hidden';}if(key==='bar'){e.style.borderRadius='4px';e.style.background='#40394F';e.style.overflow='hidden';}}
+fill.style.background=a.Accent;
+}
+async function refresh(){try{const r=await fetch(location.pathname.replace('/overlay/','/state/'),{cache:'no-store'});if(!r.ok)throw Error();const s=await r.json();title.textContent=s.Title||'';sub.textContent=s.Subtitle||'';if(!s.Appearance)sub.style.display=s.Subtitle?'block':'none';cover.style.display=s.Image?'block':'none';if(s.Image&&cover.getAttribute('src')!==s.Image)cover.src=s.Image;elapsed.textContent=time(s.Position);duration.textContent=s.Duration>0?time(s.Duration):'—:—';fill.style.width=((s.Progress||0)*100)+'%';appearance(s.Appearance);card.style.display=s.Title?(s.Appearance?'block':'flex'):'none';}catch{card.style.display='none';}setTimeout(refresh,1000)}refresh();
 </script></html>
 """;
 }

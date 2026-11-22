@@ -10,7 +10,7 @@ class ObsChecks{
  static void Check(bool b,string s){if(!b)throw new Exception(s);Console.WriteLine("PASS "+s);}
  static async Task<int> Main(string[] args){try{
  var root=Path.GetFullPath(args[0]);Directory.CreateDirectory(Path.Combine(root,"Catalog"));
- var widgets=new[]{new Widget{Id="notes",Available=true,Name="Notes",Version="1",Package="notes.zip",Executable="Notes.exe",ObsProtocol=1},new Widget{Id="future",Available=true,Name="Future",Version="1",Package="future.zip",Executable="Future.exe",ObsProtocol=1}};
+ var widgets=new[]{new Widget{Id="notes",Available=true,Name="Notes",Version="1",Package="notes.zip",Executable="Notes.exe",ObsProtocol=1},new Widget{Id="future",Available=true,Name="Future",Version="1",Package="future.zip",Executable="Future.exe",ObsProtocol=1},new Widget{Id="mini-player",Available=true,Name="Player",Version="1",Package="player.zip",Executable="Player.exe",ObsProtocol=1}};
  File.WriteAllText(Path.Combine(root,"Catalog","widgets.json"),JsonSerializer.Serialize(widgets));var manager=new WidgetManager(root);
  foreach(var w in widgets){Directory.CreateDirectory(manager.WidgetDirectory(w));File.WriteAllText(manager.Executable(w),"");File.WriteAllText(Path.Combine(manager.WidgetDirectory(w),".widget-install.json"),JsonSerializer.Serialize(w));Directory.CreateDirectory(manager.DataDirectory(w));}
  var noteFile=Path.Combine(root,"Data","notes","notes.json");File.WriteAllText(noteFile,"[{\"id\":\"public\",\"text\":\"Live note\"},{\"id\":\"private\",\"text\":\"SECRET\"}]");
@@ -26,9 +26,16 @@ class ObsChecks{
   using(var request=new HttpRequestMessage(HttpMethod.Get,url)){request.Headers.Host="example.com";Check((await client.SendAsync(request)).StatusCode==HttpStatusCode.NotFound,"Foreign Host is refused");}
   bridge.Enable(widgets[1],true);string file=Path.Combine(root,"Data","future","obs.json");File.WriteAllText(file,JsonSerializer.Serialize(new ObsState(Title:"Future widget",Image:"https://evil.invalid/a",Progress:2,Position:83,Duration:214,UpdatedAt:DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())));
   var next=bridge.State("future");Check(next.Title=="Future widget"&&next.Image==""&&next.Progress==1&&next.Position==83&&next.Duration==214,"New widget uses protocol without launcher changes; external images rejected");
+  bridge.Enable(widgets[2],true);var playerFile=Path.Combine(root,"Data","mini-player","obs.json");File.WriteAllText(playerFile,JsonSerializer.Serialize(new ObsState(Title:"Track",UpdatedAt:DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())));
+  var draft=bridge.Entry("mini-player").Appearance.Copy();draft.Width=480;draft.Parts["artist"].Visible=false;
+  Check(bridge.State("mini-player").Appearance!.Width==360,"Editing a detached draft does not change live state");
+  bridge.ApplyAppearance(draft);draft.Width=800;
+  var live=JsonSerializer.Deserialize<ObsState>(await client.GetStringAsync(bridge.Url("mini-player").Replace("/overlay/","/state/")))!;
+  Check(live.Appearance!.Width==480&&!live.Appearance.Parts["artist"].Visible,"Applied layout reaches HTTP state and remains independent from draft");
+  bridge.SavePreset("Round",ObsAppearance.Preset("circle"));Check(bridge.State("mini-player").Appearance!.Width==480,"Saving preset leaves current stream unchanged");
   File.WriteAllText(file,JsonSerializer.Serialize(new ObsState(Title:"stale",UpdatedAt:1)));Check(bridge.State("future").Title=="","Stale state hides stopped widget");
   bridge.Enable(widgets[0],false);Check((await client.GetAsync(url)).StatusCode==HttpStatusCode.NotFound,"Disabling immediately revokes source");bridge.Enable(widgets[0],true);
  }
- using(var restored=new ObsBridge(manager)){Check(restored.Url("notes")==url&&restored.Entry("notes").NoteId=="public","Links and note selection survive restart");restored.Start();using var client=new HttpClient(new HttpClientHandler{UseProxy=false});Check((await client.GetAsync(url)).IsSuccessStatusCode,"Same source works after service restart");}
+ using(var restored=new ObsBridge(manager)){Check(restored.Url("notes")==url&&restored.Entry("notes").NoteId=="public","Links and note selection survive restart");Check(restored.Entry("mini-player").Appearance.Width==480&&restored.Settings.PlayerPresets.ContainsKey("Round"),"Applied appearance and named presets survive restart");restored.Start();using var client=new HttpClient(new HttpClientHandler{UseProxy=false});Check((await client.GetAsync(url)).IsSuccessStatusCode,"Same source works after service restart");}
  return 0;}catch(Exception ex){Console.Error.WriteLine(ex);return 1;}}
 }
