@@ -34,6 +34,8 @@ setTimeout(async()=>{const results=[];function check(ok,label){if(!ok)throw Erro
  fixture.Appearance.Parts.title.Visible=false;await refresh();check(title.firstElementChild.getAnimations().length===0,'Hidden text does not animate');
  fixture.Appearance.Parts.title.Visible=true;fixture.Appearance.Parts.title.Width=244;fixture.Subtitle='Исполнитель с длинным именем и приглашённые музыканты';await refresh();
  check(!document.querySelector('canvas,svg'),'Editor grid is absent from overlay');
+ fixture.Appearance.Shape='circle';fixture.Appearance.Width=360;fixture.Appearance.Height=200;await refresh();check(getComputedStyle(card).borderTopLeftRadius==='50%'&&card.clientWidth===360&&card.clientHeight===200,'Stretched circle renders as ellipse');
+ fixture.Appearance.Shape='rounded';fixture.Appearance.Height=106;await refresh();
  document.body.dataset.test='passed';
  }catch(e){document.body.dataset.test='failed';results.push('FAIL '+e.message);}
  const report=document.createElement('pre');report.id='test-results';report.style.display='none';report.textContent=JSON.stringify(results);document.body.appendChild(report);
