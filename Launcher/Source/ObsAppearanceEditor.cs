@@ -21,14 +21,15 @@ public sealed partial class LauncherWindow
 }
 public sealed class ObsAppearanceEditor:Window
 {
+ readonly ObsHistory history;readonly Button undoButton,redoButton;int historyEditDepth;
  readonly ObsBridge? fontStore;readonly Dictionary<string,FontFamily> loadedFonts=new();readonly CheckBox gridToggle=new();readonly ComboBox gridStep=new();
  ObsAppearance draft;readonly Action<ObsAppearance> apply;readonly Action<string,ObsAppearance> savePreset;readonly Dictionary<string,ObsAppearance> saved;
- readonly StackPanel controls=new();readonly Canvas canvas=new(),surface=new(),adorners=new(),viewport=new(){ClipToBounds=true};readonly Border stage=new();readonly TextBlock dimensions=new(),feedback=new();readonly Brush panel,ink,muted,accent;readonly Dictionary<string,string> labels=new(){["cover"]="Обложка",["title"]="Название",["artist"]="Исполнитель",["elapsed"]="Текущее время",["duration"]="Длительность",["bar"]="Шкала"};
+ readonly StackPanel controls=new();readonly Canvas canvas=new(),surface=new(){Focusable=true},adorners=new(),viewport=new(){ClipToBounds=true};readonly Border stage=new();readonly TextBlock dimensions=new(),feedback=new();readonly Brush panel,ink,muted,accent;readonly Dictionary<string,string> labels=new(){["cover"]="Обложка",["title"]="Название",["artist"]="Исполнитель",["elapsed"]="Текущее время",["duration"]="Длительность",["bar"]="Шкала"};
  readonly HashSet<string> selection=new();readonly Dictionary<string,ObsPart> gestureParts=new();
  string selected="title",resizeHandle="";Point start;double previewScale=1,gestureScale=1,gestureLeft,gestureTop;bool dragging,moved,clearOnClick,frameResize;ObsAppearance? gestureFrame;Window? colorDialog;
  public ObsAppearanceEditor(Window owner,ObsAppearance initial,Dictionary<string,ObsAppearance> presets,Action<ObsAppearance> apply,Action<string,ObsAppearance> savePreset,Brush background,Brush panel,Brush ink,Brush muted,Brush accent,ObsBridge? fontStore=null){
   foreach(DictionaryEntry resource in owner.Resources)Resources[resource.Key]=resource.Value;
-  this.fontStore=fontStore;Owner=owner;this.apply=apply;this.savePreset=savePreset;this.saved=presets;this.panel=panel;this.ink=ink;this.muted=muted;this.accent=accent;draft=initial.Copy();
+  this.fontStore=fontStore;Owner=owner;this.apply=apply;this.savePreset=savePreset;this.saved=presets;this.panel=panel;this.ink=ink;this.muted=muted;this.accent=accent;draft=initial.Copy();history=new ObsHistory(draft);
   Title="Оформление плеера для OBS";Width=Math.Min(1080,SystemParameters.WorkArea.Width-32);Height=Math.Min(760,SystemParameters.WorkArea.Height-32);MinWidth=Math.Min(720,Width);MinHeight=Math.Min(500,Height);WindowStartupLocation=WindowStartupLocation.CenterOwner;Background=background;Foreground=ink;FontFamily=owner.FontFamily;
   var root=new DockPanel{Margin=new Thickness(20)};Content=root;var footer=new StackPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);feedback.Foreground=muted;feedback.Margin=new Thickness(0,10,0,8);footer.Children.Add(feedback);
   var actions=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};footer.Children.Add(actions);
@@ -36,7 +37,8 @@ public sealed class ObsAppearanceEditor:Window
   var grid=new Grid();grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(320)});grid.ColumnDefinitions.Add(new ColumnDefinition());root.Children.Add(grid);
   var scroll=new ScrollViewer{Content=controls,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Margin=new Thickness(0,0,20,0)};grid.Children.Add(scroll);
   var right=new DockPanel();Grid.SetColumn(right,1);grid.Children.Add(right);
-  var heading=new StackPanel();DockPanel.SetDock(heading,Dock.Top);right.Children.Add(heading);heading.Children.Add(new TextBlock{Text="Предпросмотр",FontSize=22,FontWeight=FontWeights.SemiBold});heading.Children.Add(new TextBlock{Text="Shift + щелчок — выбрать несколько. Перетаскивайте выделенное мышью.\nМаркеры меняют размер; Shift при растягивании сохраняет пропорции.\nЩелчок без перетаскивания или правая кнопка — снять выделение.",TextWrapping=TextWrapping.Wrap,Foreground=muted,Margin=new Thickness(0,8,0,14)});dimensions.TextWrapping=TextWrapping.Wrap;heading.Children.Add(dimensions);
+  var heading=new StackPanel();DockPanel.SetDock(heading,Dock.Top);right.Children.Add(heading);var titleRow=new DockPanel();heading.Children.Add(titleRow);var historyTools=new StackPanel{Orientation=Orientation.Horizontal};DockPanel.SetDock(historyTools,Dock.Right);titleRow.Children.Add(historyTools);
+  undoButton=HistoryButton("↶","Отменить (Ctrl+Z)",Undo);redoButton=HistoryButton("↷","Повторить (Ctrl+Y)",Redo);historyTools.Children.Add(undoButton);historyTools.Children.Add(redoButton);titleRow.Children.Add(new TextBlock{Text="Предпросмотр",FontSize=22,FontWeight=FontWeights.SemiBold});heading.Children.Add(new TextBlock{Text="Shift + щелчок — выбрать несколько. Перетаскивайте выделенное мышью.\nМаркеры меняют размер; Shift при растягивании сохраняет пропорции.\nЩелчок без перетаскивания или правая кнопка — снять выделение.",TextWrapping=TextWrapping.Wrap,Foreground=muted,Margin=new Thickness(0,8,0,14)});dimensions.TextWrapping=TextWrapping.Wrap;heading.Children.Add(dimensions);
   var gridTools=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,12,0,0)};heading.Children.Add(gridTools);gridToggle.Content="Сетка и привязка";gridToggle.Foreground=ink;gridToggle.VerticalAlignment=VerticalAlignment.Center;gridToggle.Click+=(_,_)=>{draft.GridEnabled=gridToggle.IsChecked==true;draft.AlignToGrid();BuildControls();Draw();};gridTools.Children.Add(gridToggle);
   gridTools.Children.Add(new TextBlock{Text="Шаг",Foreground=muted,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(16,0,8,0)});gridStep.ItemsSource=new[]{2,4,8,12,16,24,32};gridStep.Width=76;gridStep.SelectionChanged+=(_,_)=>{if(gridStep.SelectedItem is int step&&draft.GridSize!=step){draft.GridSize=step;draft.AlignToGrid();BuildControls();Draw();}};gridTools.Children.Add(gridStep);
   gridTools.Children.Add(new TextBlock{Text="px",Foreground=muted,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(6,0,0,0)});
@@ -45,20 +47,31 @@ public sealed class ObsAppearanceEditor:Window
   viewport.SizeChanged+=(_,_)=>{if(!dragging)Draw();};
   surface.MouseMove+=(_,e)=>PointerMove(e.GetPosition(viewport),(Keyboard.Modifiers&ModifierKeys.Shift)!=0);
   surface.MouseLeftButtonUp+=(_,e)=>{if(dragging){PointerUp();e.Handled=true;}};
-  surface.LostMouseCapture+=(_,_)=>{if(dragging){dragging=false;Draw();}};
+  surface.LostMouseCapture+=(_,_)=>{if(dragging){dragging=false;FinishHistoryEdit();BuildControls();Draw();}};
   stage.MouseLeftButtonDown+=(_,_)=>ClearSelection();stage.PreviewMouseRightButtonDown+=(_,e)=>{ClearSelection();e.Handled=true;};
-  Closed+=(_,_)=>colorDialog?.Close();PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Escape){if(selection.Count>0)ClearSelection();else Close();e.Handled=true;}};
+  Closed+=(_,_)=>colorDialog?.Close();PreviewKeyDown+=(_,e)=>{if(HistoryShortcut(e.Key,Keyboard.Modifiers,Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase)){e.Handled=true;return;}if(e.Key==Key.Escape){if(selection.Count>0)ClearSelection();else Close();e.Handled=true;}};
   feedback.Text="Изменения пока только в предпросмотре.";BuildControls();Draw();
  }
  Button Button(string text,Action action,bool primary=false){var b=new Button{Content=text,Padding=new Thickness(12,8,12,8),Margin=new Thickness(0,0,8,8),Background=primary?accent:panel,Foreground=primary?Brushes.Black:ink,BorderThickness=new Thickness(0)};b.Click+=(_,_)=>action();return b;}
+ Button HistoryButton(string arrow,string tooltip,Action action){var button=Button(arrow,action);button.Width=38;button.Height=32;button.Padding=new Thickness(0);button.Margin=new Thickness(6,0,0,0);button.FontFamily=new FontFamily("Segoe UI Symbol");button.FontSize=24;button.Focusable=false;button.ToolTip=tooltip;System.Windows.Automation.AutomationProperties.SetName(button,tooltip);return button;}
+ internal void BeginHistoryEdit(){if(historyEditDepth++==0)history.Record(draft);}
+ internal void FinishHistoryEdit(){if(historyEditDepth>0)historyEditDepth--;if(historyEditDepth==0)history.Record(draft);UpdateHistoryButtons();}
+ void UpdateHistoryButtons(){undoButton.IsEnabled=history.CanUndo||!history.IsCurrent(draft);redoButton.IsEnabled=history.CanRedo&&history.IsCurrent(draft);undoButton.Opacity=undoButton.IsEnabled?1:.35;redoButton.Opacity=redoButton.IsEnabled?1:.35;}
+ void RestoreHistory(bool redo){dragging=false;Mouse.Capture(null);historyEditDepth=0;history.Record(draft);var restored=redo?history.Redo():history.Undo();if(restored!=null){draft=restored;selection.RemoveWhere(k=>!draft.Parts[k].Visible);BuildControls();Draw();feedback.Text=(redo?"Действие повторено.":"Действие отменено.")+" Для передачи изменений в OBS нажмите «Применить».";}else UpdateHistoryButtons();}
+ internal void Undo()=>RestoreHistory(false);
+ internal void Redo()=>RestoreHistory(true);
+ internal bool HistoryShortcut(Key key,ModifierKeys modifiers,bool editingText){if(editingText||modifiers!=ModifierKeys.Control)return false;if(key==Key.Z){Undo();return true;}if(key==Key.Y){Redo();return true;}return false;}
  void Heading(string text)=>controls.Children.Add(new TextBlock{Text=text,FontSize=15,FontWeight=FontWeights.SemiBold,Margin=new Thickness(0,16,0,8)});
  string SizeText()=>$"{Math.Ceiling(draft.Width+8)} × {Math.Ceiling(draft.Height+8)}";
  void Combo(string label,string[] values,int selectedIndex,Action<int> changed){controls.Children.Add(new TextBlock{Text=label,Foreground=muted,Margin=new Thickness(0,5,0,4)});var c=new ComboBox{ItemsSource=values,SelectedIndex=selectedIndex,Padding=new Thickness(6),Margin=new Thickness(0,0,0,5)};c.SelectionChanged+=(_,_)=>{if(c.SelectedIndex>=0)changed(c.SelectedIndex);};controls.Children.Add(c);}
  void Slider(string label,double value,double min,double max,Action<double> change){
   var text=new TextBlock{Text=$"{label}: {value:0.##}",Foreground=muted,Margin=new Thickness(0,8,0,0)};controls.Children.Add(text);var slider=new Slider{Minimum=min,Maximum=max,Value=value,TickFrequency=1,IsSnapToTickEnabled=max>1,Margin=new Thickness(0,6,0,2)};
+  bool editing=false;slider.PreviewMouseLeftButtonDown+=(_,_)=>{if(!editing){editing=true;BeginHistoryEdit();}};
+  void Finish(){if(!editing)return;editing=false;FinishHistoryEdit();}
+  slider.AddHandler(UIElement.MouseLeftButtonUpEvent,new MouseButtonEventHandler((_,_)=>Finish()),true);slider.LostMouseCapture+=(_,_)=>Finish();
   slider.ValueChanged+=(_,_)=>{change(slider.Value);text.Text=$"{label}: {slider.Value:0.##}";Draw();};controls.Children.Add(slider);
  }
- void ColorButton(string label,Func<string> get,Action<string> set){var b=Button(label+"  "+get(),()=>{});b.Click+=(_,_)=>{colorDialog?.Close();var picker=new PresetColorDialog(this,label,get(),value=>{set(value);b.Content=label+"  "+value;Draw();},Background,panel,ink,muted,accent,Brushes.DimGray,panel);colorDialog=picker;picker.ShowDialog();};controls.Children.Add(b);}
+ void ColorButton(string label,Func<string> get,Action<string> set){var b=Button(label+"  "+get(),()=>{});b.Click+=(_,_)=>{colorDialog?.Close();var picker=new PresetColorDialog(this,label,get(),value=>{set(value);b.Content=label+"  "+value;Draw();},Background,panel,ink,muted,accent,Brushes.DimGray,panel);colorDialog=picker;BeginHistoryEdit();try{picker.ShowDialog();}finally{FinishHistoryEdit();}};controls.Children.Add(b);}
  void BuildControls(){controls.Children.Clear();Heading("Компоновки и пресеты");
   var presets=new[]{"Горизонтальная","Вертикальная","Квадратная","Круглая"};var keys=new[]{"wide","vertical","square","circle"};Combo("Начать с готового варианта",new[]{"Выберите вариант…"}.Concat(presets).ToArray(),0,i=>{if(i==0)return;draft=ObsAppearance.Preset(keys[i-1]);BuildControls();Draw();});
   if(saved.Count>0){var names=saved.Keys.OrderBy(x=>x).ToArray();Combo("Мои пресеты",new[]{"Выберите пресет…"}.Concat(names).ToArray(),0,i=>{if(i==0)return;draft=saved[names[i-1]].Copy();BuildControls();Draw();});}
@@ -75,12 +88,13 @@ public sealed class ObsAppearanceEditor:Window
  public void ImportFont(string path){if(fontStore==null)throw new InvalidOperationException("Хранилище шрифтов недоступно.");if(new FileInfo(path).Length>20*1024*1024)throw new InvalidDataException("Размер шрифта не должен превышать 20 МБ.");_ = new GlyphTypeface(new Uri(Path.GetFullPath(path)));string id=fontStore.ImportFont(path);draft.FontId=id;BuildControls();Draw();feedback.Text="Шрифт загружен. Нажмите «Применить в OBS», чтобы использовать его в эфире.";}
  FontFamily PreviewFont(){if(draft.FontId!=""&&fontStore!=null){if(loadedFonts.TryGetValue(draft.FontId,out var family))return family;try{var path=fontStore.FontPath(draft.FontId);if(path!=null){family=Fonts.GetFontFamilies(new Uri(path)).First();loadedFonts[draft.FontId]=family;return family;}}catch{}}return new FontFamily(draft.Font);}
  Brush Brush(string value)=>new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
- internal void ClearSelection(){dragging=false;surface.ReleaseMouseCapture();selection.Clear();BuildControls();Draw();}
+ internal void ClearSelection(){surface.Focus();bool wasDragging=dragging;dragging=false;surface.ReleaseMouseCapture();if(wasDragging)FinishHistoryEdit();selection.Clear();BuildControls();Draw();}
  internal void PointerDown(string? key,string handle,Point pointer,bool shift,bool frame=false){
+  surface.Focus();
   if(key!=null&&handle==""&&shift){if(!selection.Add(key))selection.Remove(key);selected=key;BuildControls();Draw();return;}
   clearOnClick=key!=null&&handle==""&&(selection.Contains(key)||selection.Count>1);
   if(key!=null&&!selection.Contains(key)){selection.Clear();selection.Add(key);}if(key!=null)selected=key;
-  frameResize=frame;resizeHandle=handle;start=pointer;gestureScale=previewScale;gestureLeft=Canvas.GetLeft(surface);gestureTop=Canvas.GetTop(surface);gestureFrame=draft.Copy();gestureParts.Clear();foreach(var id in selection)gestureParts[id]=ObsGeometry.Clone(draft.Parts[id]);moved=false;dragging=true;surface.CaptureMouse();Draw();
+  BeginHistoryEdit();frameResize=frame;resizeHandle=handle;start=pointer;gestureScale=previewScale;gestureLeft=Canvas.GetLeft(surface);gestureTop=Canvas.GetTop(surface);gestureFrame=draft.Copy();gestureParts.Clear();foreach(var id in selection)gestureParts[id]=ObsGeometry.Clone(draft.Parts[id]);moved=false;dragging=true;surface.CaptureMouse();Draw();
  }
  internal void PointerMove(Point pointer,bool shift){
   if(!dragging||gestureFrame==null)return;var delta=pointer-start;if(!moved&&Math.Abs(delta.X)<3&&Math.Abs(delta.Y)<3)return;moved=true;double dx=delta.X/gestureScale,dy=delta.Y/gestureScale;
@@ -89,7 +103,7 @@ public sealed class ObsAppearanceEditor:Window
   else ObsGeometry.Move(draft,gestureParts,dx,dy);
   Draw();
  }
- internal void PointerUp(){if(!dragging)return;bool clear=!moved&&clearOnClick&&!frameResize;dragging=false;surface.ReleaseMouseCapture();if(clear)selection.Clear();BuildControls();Draw();}
+ internal void PointerUp(){if(!dragging)return;bool clear=!moved&&clearOnClick&&!frameResize;dragging=false;surface.ReleaseMouseCapture();FinishHistoryEdit();if(clear)selection.Clear();BuildControls();Draw();}
  void Begin(string? key,string handle,MouseButtonEventArgs e,bool frame=false){PointerDown(key,handle,e.GetPosition(viewport),(Keyboard.Modifiers&ModifierKeys.Shift)!=0,frame);e.Handled=true;}
  void FitPreview(){if(dragging)return;double w=viewport.ActualWidth,h=viewport.ActualHeight;previewScale=w>0&&h>0?Math.Min(1,Math.Min(w/surface.Width,h/surface.Height)):1;surface.RenderTransform=new ScaleTransform(previewScale,previewScale);Canvas.SetLeft(surface,Math.Max(0,(w-surface.Width*previewScale)/2));Canvas.SetTop(surface,Math.Max(0,(h-surface.Height*previewScale)/2));}
  void Outline(double x,double y,double w,double h,bool group=false){var outline=new System.Windows.Shapes.Rectangle{Width=w,Height=h,Stroke=accent,StrokeThickness=1/previewScale,IsHitTestVisible=false};if(group)outline.StrokeDashArray=new DoubleCollection{4,3};Canvas.SetLeft(outline,x+16);Canvas.SetTop(outline,y+16);adorners.Children.Add(outline);}
@@ -100,7 +114,7 @@ public sealed class ObsAppearanceEditor:Window
    Canvas.SetLeft(grip,px+16-size/2);Canvas.SetTop(grip,py+16-size/2);string direction=handle;grip.MouseLeftButtonDown+=(_,e)=>Begin(key,direction,e,frame);adorners.Children.Add(grip);
   }
  }
- void Draw(){feedback.Text="Предпросмотр. Для передачи изменений в OBS нажмите «Применить».";draft.Normalize();selection.RemoveWhere(k=>!draft.Parts[k].Visible);gridToggle.IsChecked=draft.GridEnabled;gridStep.SelectedItem=draft.GridSize;canvas.Children.Clear();adorners.Children.Clear();canvas.Width=draft.Width;canvas.Height=draft.Height;surface.Width=draft.Width+32;surface.Height=draft.Height+32;adorners.Width=surface.Width;adorners.Height=surface.Height;FitPreview();
+ void Draw(){feedback.Text="Предпросмотр. Для передачи изменений в OBS нажмите «Применить».";draft.Normalize();if(historyEditDepth==0)history.Record(draft);UpdateHistoryButtons();selection.RemoveWhere(k=>!draft.Parts[k].Visible);gridToggle.IsChecked=draft.GridEnabled;gridStep.SelectedItem=draft.GridSize;canvas.Children.Clear();adorners.Children.Clear();canvas.Width=draft.Width;canvas.Height=draft.Height;surface.Width=draft.Width+32;surface.Height=draft.Height+32;adorners.Width=surface.Width;adorners.Height=surface.Height;FitPreview();
   bool ellipse=draft.Shape=="circle";double radius=draft.Shape=="rectangle"?0:draft.Radius;canvas.Clip=ellipse?new EllipseGeometry(new Rect(0,0,draft.Width,draft.Height)):new RectangleGeometry(new Rect(0,0,draft.Width,draft.Height),radius,radius);
   var background=(SolidColorBrush)Brush(draft.Background);background.Opacity=draft.Opacity;
   if(ellipse)canvas.Children.Add(new System.Windows.Shapes.Ellipse{Width=draft.Width,Height=draft.Height,Fill=background,Stroke=Brush(draft.Border),StrokeThickness=draft.BorderWidth});
