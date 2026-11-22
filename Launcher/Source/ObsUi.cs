@@ -10,7 +10,7 @@ public sealed partial class LauncherWindow
  void ConfigureObs(){obs=new ObsBridge(manager);if(!preview){try{if(obs.Settings.Widgets.Any(x=>x.Value.Enabled))obs.Start();}catch(Exception ex){message="OBS: "+ex.Message;}}Closed+=(_,_)=>obs.Dispose();}
  void RenderObs(){
   if(obs==null)return;
-  content.Children.Add(Label("Добавьте в OBS источник «Браузер» и вставьте ссылку. Хаб должен оставаться запущенным; его можно свернуть в трей. Фон за карточкой прозрачный. Рекомендуемый размер: 640 × 240, для заметок — 640 × 480.",13,MutedBrush,new Thickness(0,0,0,18)));
+  content.Children.Add(Label("Добавьте в OBS источник «Браузер» и вставьте ссылку. Хаб должен оставаться запущенным; его можно свернуть в трей. Фон за карточкой прозрачный. Рекомендуемый размер: 368 × 116, для заметок — 640 × 480.",13,MutedBrush,new Thickness(0,0,0,18)));
   var portPanel=new WrapPanel();portPanel.Children.Add(Label("Порт: ",13));var port=new TextBox{Text=obs.Settings.Port.ToString(),Width=90,Margin=new Thickness(8,0,12,10)};portPanel.Children.Add(port);
   var change=ActionButton("Сохранить порт",()=>{if(!int.TryParse(port.Text,out int n)||n<1024||n>65535){message="Укажите порт от 1024 до 65535.";Render();return;}obs.Settings.Port=n;obs.Save();message="Порт сохранён. Перезапустите хаб и обновите ссылки в OBS.";Render();});change.IsEnabled=!obs.Running;port.IsEnabled=!obs.Running;portPanel.Children.Add(change);content.Children.Add(portPanel);
   foreach(var widget in catalog.Where(w=>w.Available)){

@@ -24,8 +24,8 @@ class ObsChecks{
   Check((await client.GetAsync(url.Replace(bridge.Entry("notes").Token,"wrong"))).StatusCode==HttpStatusCode.NotFound,"Unknown token is refused");
   Check((await client.PostAsync(url,new StringContent("ignored"))).StatusCode==HttpStatusCode.NotFound,"Write requests are refused");
   using(var request=new HttpRequestMessage(HttpMethod.Get,url)){request.Headers.Host="example.com";Check((await client.SendAsync(request)).StatusCode==HttpStatusCode.NotFound,"Foreign Host is refused");}
-  bridge.Enable(widgets[1],true);string file=Path.Combine(root,"Data","future","obs.json");File.WriteAllText(file,JsonSerializer.Serialize(new ObsState(Title:"Future widget",Image:"https://evil.invalid/a",Progress:2,UpdatedAt:DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())));
-  var next=bridge.State("future");Check(next.Title=="Future widget"&&next.Image==""&&next.Progress==1,"New widget uses protocol without launcher changes; external images rejected");
+  bridge.Enable(widgets[1],true);string file=Path.Combine(root,"Data","future","obs.json");File.WriteAllText(file,JsonSerializer.Serialize(new ObsState(Title:"Future widget",Image:"https://evil.invalid/a",Progress:2,Position:83,Duration:214,UpdatedAt:DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())));
+  var next=bridge.State("future");Check(next.Title=="Future widget"&&next.Image==""&&next.Progress==1&&next.Position==83&&next.Duration==214,"New widget uses protocol without launcher changes; external images rejected");
   File.WriteAllText(file,JsonSerializer.Serialize(new ObsState(Title:"stale",UpdatedAt:1)));Check(bridge.State("future").Title=="","Stale state hides stopped widget");
   bridge.Enable(widgets[0],false);Check((await client.GetAsync(url)).StatusCode==HttpStatusCode.NotFound,"Disabling immediately revokes source");bridge.Enable(widgets[0],true);
  }

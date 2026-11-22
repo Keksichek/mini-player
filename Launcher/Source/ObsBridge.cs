@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace WidgetLauncher;
 
-public sealed record ObsState(int Version=1,string Title="",string Subtitle="",string Image="",double Progress=0,long UpdatedAt=0);
+public sealed record ObsState(int Version=1,string Title="",string Subtitle="",string Image="",double Progress=0,long UpdatedAt=0,double Position=0,double Duration=0);
 public sealed class ObsEntry { public bool Enabled{get;set;} public string Token{get;set;}=Guid.NewGuid().ToString("N"); public string NoteId{get;set;}=""; }
 public sealed class ObsPreferences { public int Port{get;set;}=18765; public Dictionary<string,ObsEntry> Widgets{get;set;}=new(); }
 
@@ -44,7 +44,7 @@ public sealed class ObsBridge:IDisposable
   if(widget.ObsProtocol!=1)return new();
   try{string file=Path.Combine(manager.DataDirectory(widget),"obs.json");WidgetManager.RejectLinks(file);if(new FileInfo(file).Length>2*1024*1024)return new();var state=JsonSerializer.Deserialize<ObsState>(File.ReadAllText(file));
    if(state==null||state.Version!=1||Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-state.UpdatedAt)>10000)return new();
-   return state with {Title=(state.Title??"")[..Math.Min(state.Title?.Length??0,8000)],Subtitle=(state.Subtitle??"")[..Math.Min(state.Subtitle?.Length??0,1000)],Image=state.Image!=null&&state.Image.StartsWith("data:image/png;base64,",StringComparison.Ordinal)&&state.Image.Length<1500000?state.Image:"",Progress=double.IsFinite(state.Progress)?Math.Clamp(state.Progress,0,1):0};
+   return state with {Title=(state.Title??"")[..Math.Min(state.Title?.Length??0,8000)],Subtitle=(state.Subtitle??"")[..Math.Min(state.Subtitle?.Length??0,1000)],Image=state.Image!=null&&state.Image.StartsWith("data:image/png;base64,",StringComparison.Ordinal)&&state.Image.Length<1500000?state.Image:"",Progress=double.IsFinite(state.Progress)?Math.Clamp(state.Progress,0,1):0,Position=double.IsFinite(state.Position)?Math.Max(0,state.Position):0,Duration=double.IsFinite(state.Duration)?Math.Max(0,state.Duration):0};
   }catch{return new();}
  }
  async Task Serve(TcpClient client){
@@ -68,11 +68,18 @@ public sealed class ObsBridge:IDisposable
  public void Dispose(){cancel.Cancel();listener?.Stop();listener=null;}
  const string Html="""
 <!doctype html><html lang="ru"><meta charset="utf-8"><style>
-*{box-sizing:border-box}html,body{margin:0;background:transparent;font-family:'Segoe UI',sans-serif;color:#fff}#card{display:none;align-items:center;gap:18px;margin:12px;padding:22px;border-radius:24px;background:rgba(22,20,34,.92);border:1px solid #6b598e;max-width:calc(100% - 24px)}img{width:96px;height:96px;object-fit:cover;border-radius:16px}article{flex:1;min-width:0}h1{font-size:26px;line-height:1.25;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}p{font-size:17px;color:#c9bfdc;margin:8px 0}#bar{height:5px;border-radius:5px;background:#443954;overflow:hidden;margin-top:16px}#fill{height:100%;background:#baa1ff;transition:width 1s linear}body.note img,body.note #bar{display:none!important}
-</style><div id="card"><img id="cover"><article><h1 id="title"></h1><p id="subtitle"></p><div id="bar"><div id="fill"></div></div></article></div><script>
-const card=document.getElementById('card'),title=document.getElementById('title'),sub=document.getElementById('subtitle'),cover=document.getElementById('cover'),fill=document.getElementById('fill');
+*{box-sizing:border-box}html,body{margin:0;background:transparent;font-family:'Segoe UI',sans-serif;color:#f5f3fa}
+#card{display:none;align-items:center;gap:12px;margin:4px;padding:12px;border-radius:18px;background:linear-gradient(125deg,rgba(31,29,42,.97),rgba(19,19,28,.97));border:1px solid rgba(209,196,255,.16);width:360px;max-width:calc(100% - 8px);min-height:106px}
+#art{width:80px;height:80px;flex:0 0 80px;border-radius:12px;overflow:hidden;background:linear-gradient(135deg,#52436c,#272535);display:grid;place-items:center;position:relative}#art:before{content:'♪';font-size:30px;color:#c4addf}#cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+article{flex:1;min-width:0}h1{font-size:16px;line-height:21px;font-weight:650;letter-spacing:-.2px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}p{font-size:12px;line-height:17px;color:#aaa5b9;margin:2px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#timeline{margin-top:13px}#times{display:flex;justify-content:space-between;font-size:10px;line-height:13px;font-variant-numeric:tabular-nums;color:#a9a3b8;margin-bottom:5px}#elapsed{color:#e0d7f4}#bar{height:4px;border-radius:4px;background:#3b3748;overflow:hidden}#fill{height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#a58cd7,#d3bfff);transition:width .8s linear}
+body.note #card{width:auto;max-width:calc(100% - 24px);margin:12px;padding:22px;border-radius:24px}body.note #art,body.note #timeline{display:none!important}body.note h1{font-size:26px;line-height:1.25;white-space:pre-wrap;overflow-wrap:anywhere}body.note p{white-space:pre-wrap;font-size:17px}
+@media(max-width:280px){#card{gap:9px;padding:10px}#art{width:60px;height:60px;flex-basis:60px}h1{font-size:14px}#timeline{margin-top:8px}}
+</style><div id="card"><div id="art"><img id="cover" alt=""></div><article><h1 id="title"></h1><p id="subtitle"></p><div id="timeline"><div id="times"><span id="elapsed">0:00</span><span id="duration">0:00</span></div><div id="bar"><div id="fill"></div></div></div></article></div><script>
+const card=document.getElementById('card'),title=document.getElementById('title'),sub=document.getElementById('subtitle'),cover=document.getElementById('cover'),fill=document.getElementById('fill'),elapsed=document.getElementById('elapsed'),duration=document.getElementById('duration');
 if(location.pathname.endsWith('/notes'))document.body.classList.add('note');
-async function refresh(){try{const r=await fetch(location.pathname.replace('/overlay/','/state/'),{cache:'no-store'});if(!r.ok)throw Error();const s=await r.json();title.textContent=s.Title||'';sub.textContent=s.Subtitle||'';sub.style.display=s.Subtitle?'block':'none';cover.style.display=s.Image?'block':'none';if(s.Image&&cover.getAttribute('src')!==s.Image)cover.src=s.Image;fill.style.width=((s.Progress||0)*100)+'%';card.style.display=s.Title?'flex':'none';}catch{card.style.display='none';}setTimeout(refresh,1000)}refresh();
+function time(value){let n=Math.max(0,Math.floor(Number(value)||0)),h=Math.floor(n/3600),m=Math.floor(n/60)%60,s=String(n%60).padStart(2,'0');return h?h+':'+String(m).padStart(2,'0')+':'+s:Math.floor(n/60)+':'+s}
+async function refresh(){try{const r=await fetch(location.pathname.replace('/overlay/','/state/'),{cache:'no-store'});if(!r.ok)throw Error();const s=await r.json();title.textContent=s.Title||'';sub.textContent=s.Subtitle||'';sub.style.display=s.Subtitle?'block':'none';cover.style.display=s.Image?'block':'none';if(s.Image&&cover.getAttribute('src')!==s.Image)cover.src=s.Image;elapsed.textContent=time(s.Position);duration.textContent=s.Duration>0?time(s.Duration):'—:—';fill.style.width=((s.Progress||0)*100)+'%';card.style.display=s.Title?'flex':'none';}catch{card.style.display='none';}setTimeout(refresh,1000)}refresh();
 </script></html>
 """;
 }
