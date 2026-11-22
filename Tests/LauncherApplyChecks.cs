@@ -18,7 +18,7 @@ static class LauncherApplyChecks {
   string root=Path.GetFullPath(args[0]);using(var marker=JsonDocument.Parse(File.ReadAllText(Path.Combine(root,"launcher-install.json"))))if(!marker.RootElement.GetProperty("TestInstallation").GetBoolean())throw new Exception("Only isolated test installations are allowed");
   var assembly=Assembly.LoadFrom(args[1]);var windowType=assembly.GetType("WidgetLauncher.LauncherWindow",true)!;var presetType=assembly.GetType("WidgetLauncher.WidgetPreset",true)!;
   app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());launcher=(Window)Activator.CreateInstance(windowType,new object[]{root,true,"customize"})!;
-  manager=windowType.GetField("manager",Flags)!.GetValue(launcher)!;var catalog=(System.Collections.IEnumerable)Call(manager,"ReadCatalog")!;widget=catalog.Cast<object>().Single();
+  manager=windowType.GetField("manager",Flags)!.GetValue(launcher)!;var catalog=(System.Collections.IEnumerable)Call(manager,"ReadCatalog")!;widget=catalog.Cast<object>().Single(w=>(string?)w.GetType().GetProperty("Id")!.GetValue(w)=="mini-player");
   object preset=JsonSerializer.Deserialize("{\"Name\":\"Actual launcher Apply fixture\",\"Width\":430,\"Height\":270,\"FontSize\":60,\"Shape\":\"hexagon\"}",presetType)!;
   windowType.GetField("presetDraft",Flags)!.SetValue(launcher,preset);
   Await((Task)Call(launcher,"ApplyCurrentPresetAsync")!);

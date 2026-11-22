@@ -51,7 +51,7 @@ internal static class LauncherCustomizationChecks
   Check(!Nodes<TextBlock>().Any(x=>x.Text is "01" or "02" or "03"),"Entry cards contain no numbered labels");
   var navigation=(Dictionary<string,Button>)Field("nav")!;
   Check(navigation.Keys.ToArray().SequenceEqual(new[]{"catalog","installed","customize","obs","settings"}),"OBS navigation sits directly after customization");
-  Navigate("obs");Check(Nodes<TextBlock>().Any(x=>x.Text=="скоро будет, братва"),"OBS page shows the requested placeholder");Snapshot("obs");
+  Navigate("obs");Check(Nodes<TextBox>().Any(x=>AutomationProperties.GetName(x)=="Порт OBS")&&Nodes<Button>().Any(x=>x.Content as string=="Сохранить порт"),"OBS page exposes actual connection controls");Snapshot("obs");
   Navigate("customize");
   foreach(string mode in new[]{"Готовые пресеты","Создать свой пресет","Рандомизировать","Созданные пресеты"}){
    Check(Button(mode).IsVisible,"Entry card is present: "+mode);Click(mode);

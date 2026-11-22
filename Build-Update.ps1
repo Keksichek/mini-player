@@ -2,7 +2,7 @@ param(
  [string]$PayloadDirectory=(Join-Path $PSScriptRoot '.build\Payload'),
  [string]$OutputDirectory=(Join-Path $PSScriptRoot 'dist\local-update'),
  [long]$BuildNumber=0,
- [string]$Version='0.3',
+ [string]$Version='0.3.1-alpha.1',
  [string]$Notes='Локальная тестовая сборка.',
  [string]$SigningKeyPath=(Join-Path $PSScriptRoot '.build\update-signing\private.xml'),
  [string]$PublicKeyPath=(Join-Path $PSScriptRoot 'Shared\UpdatePublicKey.xml'),

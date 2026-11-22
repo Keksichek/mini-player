@@ -30,7 +30,7 @@ static class UpdateUiChecks
  static void WriteFeed(long build,string notes="Исправления и локальная проверка."){
   Directory.CreateDirectory(feed);string zip=Path.Combine(feed,"payload.zip");if(File.Exists(zip))File.Delete(zip);
   using(var archive=ZipFile.Open(zip,ZipArchiveMode.Create)){using var output=new StreamWriter(archive.CreateEntry("sample.txt").Open());output.Write("Local update UI fixture");}
-  var bytes=JsonSerializer.SerializeToUtf8Bytes(new{ProductId="MiniPlayer.WidgetLauncher",Channel="secondary-local",BuildNumber=build,Version="0.2",Package="payload.zip",Sha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))).ToLowerInvariant(),Size=new FileInfo(zip).Length,Notes=notes});
+  var bytes=JsonSerializer.SerializeToUtf8Bytes(new{ProductId="MiniPlayer.WidgetLauncher",Channel="keksichek-local",BuildNumber=build,Version="0.2",Package="payload.zip",Sha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(zip))).ToLowerInvariant(),Size=new FileInfo(zip).Length,Notes=notes});
   File.WriteAllBytes(Path.Combine(feed,"update.json"),bytes);using var rsa=RSA.Create();rsa.FromXmlString(File.ReadAllText(key));File.WriteAllText(Path.Combine(feed,"update.sig"),Convert.ToBase64String(rsa.SignData(bytes,HashAlgorithmName.SHA256,RSASignaturePadding.Pkcs1)));
  }
  static void State(long build)=>File.WriteAllText(Path.Combine(root,"update-state.json"),JsonSerializer.Serialize(new{BuildNumber=build,Version="0.1"}));

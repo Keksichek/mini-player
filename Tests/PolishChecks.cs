@@ -186,7 +186,7 @@ internal static class PolishChecks
    var repeat=(Button)Field("repeat")!;
    Check(!repeat.IsEnabled,"Repeat starts disabled without supported media source");
    if(args.Length>1){
-    string payload=Path.GetFullPath(args[1]);const string version="0.3";
+    string payload=Path.GetFullPath(args[1]);const string version="0.3.1-alpha.1";
     using(var catalog=JsonDocument.Parse(File.ReadAllText(Path.Combine(payload,"Catalog","widgets.json"))))Check(catalog.RootElement[0].GetProperty("Version").GetString()=="0.1","Catalog identifies player as 0.1");
     var launcherAssembly=Assembly.LoadFrom(Path.Combine(payload,"Launcher.dll"));
     Check(launcherAssembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion==version,"Launcher informational version keeps all digits");

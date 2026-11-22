@@ -16,6 +16,7 @@ namespace MiniPlayer
  {
   internal sealed record Session(string SourceAppUserModelId);
   internal bool closing,shownByUser;
+  internal bool SuppressPauseDisplay=>false; // Pause visibility is covered by PlayerIntegrationChecks.
   internal readonly CheckBox auto=new(){IsChecked=true};
   internal Session? session;
   internal bool IsVisible {get;private set;}=true;

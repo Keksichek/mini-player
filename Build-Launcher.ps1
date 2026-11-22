@@ -88,7 +88,7 @@ foreach($package in $packages){
  if((Get-FileHash -LiteralPath $archive -Algorithm SHA512).Hash -ine $package.Hash){throw ('Runtime checksum mismatch: '+$package.Name)}
  [IO.Compression.ZipFile]::ExtractToDirectory($archive,(Join-Path $payload 'Runtime'),$true)
 }
-$buildState = [ordered]@{BuildNumber=$BuildNumber; Version='0.3'; Channel='keksichek-local'}
+$buildState = [ordered]@{BuildNumber=$BuildNumber; Version='0.3.1-alpha.1'; Channel='keksichek-local'}
 [IO.File]::WriteAllText((Join-Path $payload 'update-state.json'),($buildState | ConvertTo-Json -Compress))
 if(!$SkipInstaller){& (Join-Path $projectRoot 'Installer\Build.ps1') -PayloadDirectory $payload -OutputDirectory $OutputDirectory}
 Write-Host ('Payload: '+$payload)

@@ -17,8 +17,8 @@ using Microsoft.Win32;
 using File=WidgetLauncherSetup.HubFile;
 using Directory=WidgetLauncherSetup.HubDirectory;
 
-[assembly: AssemblyVersion("0.3.0.0")]
-[assembly: AssemblyFileVersion("0.3.0.0")]
+[assembly: AssemblyVersion("0.3.1.0")]
+[assembly: AssemblyFileVersion("0.3.1.0")]
 [assembly: AssemblyInformationalVersion(WidgetLauncherSetup.InstallEngine.ProductVersion)]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8")]
 
@@ -70,7 +70,7 @@ namespace WidgetLauncherSetup
  {
   public const string ProductId="MiniPlayer.WidgetLauncher";
   public const string ProductName="VibeWidgetsHub alpha";
-  public const string ProductVersion="0.3";
+  public const string ProductVersion="0.3.1-alpha.1";
   public const string MarkerName="launcher-install.json";
   public static void ConfigureRuntime(){AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling",false);AppContext.SetSwitch("Switch.System.IO.BlockLongPaths",false);}
   public static string ResolveDestination(string selected){

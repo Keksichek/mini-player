@@ -1,6 +1,7 @@
 param([string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $env:TEMP ('WidgetLauncher-InstallerChecks-' + [Guid]::NewGuid().ToString('N')) }
+$OutputDirectory=[IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
